@@ -93,7 +93,7 @@ function FUNC_unpack() {
     }
     $verify = isset($_REQUEST['verify']) ? intval($_REQUEST['verify']) : 0;
     $za = new ZipArchive();
-    if ($za->open('_wp_dwnl_rel.zip', ZipArchive::RDONLY) !== true) {
+    if ($za->open('_wp_dwnl_rel.zip') !== true) {
         echo("\nCannot open downloaded ZIP file\nError");
         return;
     }
