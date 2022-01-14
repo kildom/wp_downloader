@@ -1,4 +1,4 @@
 <?php
-$version = '9999.99.99';
-$version = 'v.0.0.0'
+$version = 'v9999.99.99';
+//$version = 'v0.0.0'
 ?>

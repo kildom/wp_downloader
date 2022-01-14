@@ -132,12 +132,13 @@ async function main() {
         }
         current_wpd_version = update_response.current;
         new_wpd_version = update_response['new'];
-        update_needed = !!update_response.update;
+        update_needed = !!parseInt(update_response.update);
         logAppend(` OK`);
         logText(`Current version ${current_wpd_version}`);
         logText(`Latest version ${new_wpd_version}`);
     } catch (ex) {
         logAppend(' ERROR - skipping automatic updates');
+        console.warn(ex);
     }
 
     if (!update_needed) {
@@ -153,10 +154,19 @@ async function main() {
 async function do_update(with_download) {
     switchScreen('progress');
     logText(`Updating WordPress Downloader...`);
-    await download('auto_update', { update: 1 });
+    let new_file = await download('auto_update', { update: 1 });
     logAppend(' OK');
     logText(`Reloading the page...`);
     setTimeout(() => location.reload(), 1000);
+    if (with_download) {
+        let element = document.createElement('a');
+        element.setAttribute('href', 'data:application/octet-stream,' + encodeURIComponent(new_file));
+        element.setAttribute('download', 'wp_downloader.php');
+        element.style.display = 'none';
+        document.body.appendChild(element);
+        element.click();
+        document.body.removeChild(element);
+    }
 }
 
 async function load_releases() {

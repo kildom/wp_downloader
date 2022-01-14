@@ -23,7 +23,7 @@ $tst = $cnt;
 function include_repl($m) {
     $contents = file_get_contents(__DIR__ . "/" . $m[1]);
     if ($m[1] == 'version.php' && isset($_SERVER['BUILD_VERSION']) && $_SERVER['BUILD_VERSION'] != '') {
-        $contents = str_replace("'9999.99.99'", "'" . $_SERVER['BUILD_VERSION'] . "'", $contents);
+        $contents = str_replace("'v9999.99.99'", "'" . $_SERVER['BUILD_VERSION'] . "'", $contents);
     }
     return $contents;
 }
