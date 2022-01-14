@@ -6,7 +6,7 @@ You have to place a single `wp_downloader.php` file to your server and start the
 
 ## Download
 
-Go to [releases](https://github.com/kildom/wp_downloader/releases) to download latest `wp_downloader.php` file.
+Go to [releases](https://github.com/kildom/wp_downloader/releases/latest) to download latest `wp_downloader.php` file.
 
 ## Rationale
 
