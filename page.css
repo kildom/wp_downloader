@@ -115,3 +115,7 @@ table.details tr:nth-child(3n+1) td {
 h1 {
     color:#006c97;
 }
+
+#current-wpd-version, #new-wpd-version {
+    font-weight: bold;
+}

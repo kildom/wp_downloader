@@ -70,6 +70,31 @@
     </table>
 </div>
 
+<div id="screen-update" class="screen">
+    <h1>Automatic Update</h1>
+    There is a new version of WordPress Downloader.<br>
+    Your version: <span id="current-wpd-version"></span><br>
+    Latest version: <span id="new-wpd-version"></span>
+    <br><br>
+    <table>
+        <tr>
+            <td width="33%"><a onclick="wrap(do_update, false)" class="button-small" href="javascript:// Update">Update</a></td>
+            <td>WordPress Downloader will update itself and restart in a new version.<br></td>
+        </tr>
+        <tr><td>&nbsp;</td></tr>
+        <tr>
+            <td width="33%"><a onclick="wrap(do_update, true)" class="button-small" href="javascript:// Update and download">Update and download</a></td>
+            <td>WordPress Downloader will update itself and restart in a new version.
+                Additionally, your browser will download copy of updated version to your local system.<br></td>
+        </tr>
+        <tr><td>&nbsp;</td></tr>
+        <tr>
+            <td width="33%"><a onclick="wrap(load_releases)" class="button-small" href="javascript:// Skip">Skip</a></td>
+            <td>Do not update now (not recommended).<br></td>
+        </tr>
+    </table>
+</div>
+
 
 <!--div id="drop-area">
     Drop your custom ZIP file here to install it.

@@ -1,7 +1,94 @@
-<?php
+<?php include('version.php') ?><?php
+
+$update_url = 'https://api.github.com/repos/kildom/wp_downloader/releases/latest';
+$public_key = "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEIk7ZCuaV8jp+A5MxdivJM+LCqXiv\nKVQJijYssSjx5L5cvLofKa74tpdY4UF4Dfcb/8Bu6ZUN39KIj4YNHVb1KA==\n-----END PUBLIC KEY-----\n";
+$backup_public_key = "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEuc9S0sE8ANEFnsOCOlUZRI1jV/C1\nvUzJkwieSBzv3I4X6aHbl6YaBXwXtDeZLFW+dEMdu2HikrxOQYi6SSAqaQ==\n-----END PUBLIC KEY-----\n";
 
 function is_valid_url($url) {
     return preg_match_all('/^https:\/\/([a-z_0-9-.]+\.)?wordpress\.org\/.*$/', $url);
+}
+
+function get_url($url, $secure = false) {
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_USERAGENT, $_SERVER['HTTP_USER_AGENT']);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+    curl_setopt($ch, CURLOPT_HEADER, 0);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, !!$secure);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+    curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
+    $res = curl_exec($ch);
+    if(curl_error($ch)) {
+        echo(curl_error($ch));
+    }
+    curl_close($ch);
+    return $res;
+}
+
+function FUNC_auto_update() {
+    global $version, $update_url;
+    header('Content-type: text/plain');
+    $update = isset($_REQUEST['update']) ? intval($_REQUEST['update']) : 0;
+    $cnt = get_url($update_url);
+    $cnt = json_decode($cnt, false);
+    $new_version = $cnt->tag_name;
+    if (!$new_version) {
+        echo("\nUnable to read release information\nError");
+        return;
+    }
+    if (strnatcasecmp($version, $new_version) >= 0) {
+        echo("current: $version\n");
+        echo("new: $new_version\n");
+        echo("update: 0\n");
+        echo("OK");
+        return;
+    }
+    if (!$update) {
+        echo("current: $version\n");
+        echo("new: $new_version\n");
+        echo("update: 1\n");
+        echo("OK");
+        return;
+    }
+    $download_url = null;
+    foreach ($cnt->assets as $asset) {
+        if (strrchr($asset->name, '.') == '.php') {
+            $download_url = $asset->browser_download_url;
+        }
+    }
+    if ($download_url === null) {
+        echo("\nAsset not found in latest release\nError");
+        return;
+    }
+    
+    $update_file = get_url($download_url);
+
+    $pos = strrpos($update_file, '/*');
+    if (!$pos) {
+        echo("\nMissing signature\nError");
+        return;
+    }
+    $sig = substr($update_file, $pos + 2);
+    $data = substr($update_file, 0, $pos);
+    $data = rtrim($data);
+    $pos = strrpos($sig, '*');
+    if (!$pos) {
+        echo("\nMissing signature\nError");
+        return;
+    }
+    $sig = substr($sig, 0, $pos);
+    $res = openssl_verify($data, base64_decode($sig), $public_key, OPENSSL_ALGO_SHA256);
+    if ($res !== 1) {
+        $res = openssl_verify($data, base64_decode($sig), $backup_public_key, OPENSSL_ALGO_SHA256);
+    }
+    if ($res !== 1) {
+        echo("\nInvalid signature\nError");
+        return;
+    }
+    file_put_contents('wp_downloader.php', $update_file); // TODO: different name
+    echo("current: $version\n");
+    echo("new: $new_version\n");
+    echo("update: 1\n");
+    echo("OK");
 }
 
 function FUNC_download_page() {
@@ -171,9 +258,7 @@ function FUNC_test_result() {
 }
 
 function show_page() {
-    ?>
-    <?php include('page.php') ?>
-    <?php
+    ?><?php include('page.php') ?><?php
 }
 
 function do_test() {
