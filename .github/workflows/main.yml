@@ -11,9 +11,16 @@ jobs:
     steps:
     
       - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
       
       - name: Build downloader
-        run: php _build.php
+        env:
+          BUILD_PRIVATE_KEY: ${{ secrets.BUILD_PRIVATE_KEY }}
+        run: |
+          export BUILD_VERSION=`git describe --tags`
+          echo Building \"$BUILD_VERSION\"
+          php _build.php
 
       - name: Upload a Build Artifact
         uses: actions/upload-artifact@v2.3.1

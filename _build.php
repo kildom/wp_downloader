@@ -118,5 +118,14 @@ if (isset($_SERVER['BUILD_PRIVATE_KEY']) && $_SERVER['BUILD_PRIVATE_KEY'] != '')
 
 //----------------- Write final output
 
+function common_new_lines(&$text) {
+    $text = str_replace("\r\n", "\n", $text);
+    $text = str_replace("\r", "\n", $text);
+    $text = str_replace("\n", "\r\n", $text);
+}
+
+common_new_lines($cnt);
+common_new_lines($tst);
+
 file_put_contents('wp_downloader.php', $cnt);
 file_put_contents('wp_downloader_test.php', $tst);
