@@ -1,5 +1,11 @@
-<?php include('version.php') ?><?php
+<?php include('geturl.php') ?>
+<?php
 
+$version = /*BUILDVAR:version*/'v9999.99.99'/**/;
+//$version = 'v0.0.0';
+$cacert_url = /*BUILDVAR:cacert_url*/'https://curl.se/ca/cacert-2021-10-26.pem'/**/;
+$cacert_hash = /*BUILDVAR:cacert_hash*/'cb6545d71a1f4d3e3ab93541c97a6b8e3131a5ae'/**/;
+$cacert_latest_url = 'https://curl.se/ca/cacert.pem';
 $update_url = 'https://api.github.com/repos/kildom/wp_downloader/releases/latest';
 $html_update_url = 'https://github.com/kildom/wp_downloader/releases/latest';
 $html_update_regex = '/href=".*\/wp_downloader\/releases\/download\/([^"]*)\/([^"]*\.php)"/';
@@ -11,33 +17,17 @@ function is_valid_url($url) {
     return preg_match_all('/^https:\/\/([a-z_0-9-.]+\.)?wordpress\.org\/.*$/', $url);
 }
 
-function get_url($url, $secure = false) {
-    $ch = curl_init($url);
-    curl_setopt($ch, CURLOPT_USERAGENT, $_SERVER['HTTP_USER_AGENT']);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-    curl_setopt($ch, CURLOPT_HEADER, 0);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, !!$secure);
-    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-    curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
-    $res = curl_exec($ch);
-    if(curl_error($ch)) {
-        echo(curl_error($ch));
-    }
-    curl_close($ch);
-    return $res;
-}
-
 function FUNC_auto_update() {
     global $version, $update_url, $html_update_url, $html_update_regex, $html_update_prefix;
     global $public_key, $backup_public_key;
     header('Content-type: text/plain');
     $update = isset($_REQUEST['update']) ? intval($_REQUEST['update']) : 0;
-    $json = get_url($update_url);
+    $json = get_url($update_url, false);
     $cnt = json_decode($json, false);
     $download_url = null;
     $new_version = $cnt->tag_name;
     if (!$new_version) {
-        $html = get_url($html_update_url);
+        $html = get_url($html_update_url, false);
         if (!preg_match($html_update_regex, $html, $m) || !$m) {
             echo($json);
             echo($html);
@@ -73,7 +63,7 @@ function FUNC_auto_update() {
         return;
     }
     
-    $update_file = get_url($download_url);
+    $update_file = get_url($download_url, false);
 
     $pos = strrpos($update_file, '/*');
     if (!$pos) {
@@ -106,6 +96,36 @@ function FUNC_auto_update() {
     echo("\nOK");
 }
 
+function FUNC_cacert_fix() {
+    global $cacert_url, $cacert_hash, $cacert_latest_url;
+    header('Content-type: text/plain');
+    $level = intval($_REQUEST['level']);
+    if ($level > 0 && !cacert_exists()) {
+        echo("\nInvalid state\nError");
+        return;
+    }
+    if ($level == 0) {
+        $cacert = get_url($cacert_url, false);
+        if (!$cacert) {
+            echo("\nCannot download cacert\nError");
+            return;
+        }
+        if (sha1($cacert) != $cacert_hash) {
+            echo("\nInvalid cacert hash\nError");
+            return;
+        }
+        file_put_contents("_wp_dwnl_cacert.pem", $cacert);
+    } else {
+        $cacert = get_url($cacert_latest_url, true);
+        if (!$cacert) {
+            echo("\nCannot download cacert\nError");
+            return;
+        }
+        file_put_contents("_wp_dwnl_cacert.pem", $cacert);
+    }
+    echo("\nOK");
+}
+
 function FUNC_download_page() {
     header('Content-type: text/plain');
     $url = stripslashes($_REQUEST['url']);
@@ -113,7 +133,7 @@ function FUNC_download_page() {
         echo("\nInvalid URL\nError");
         return;
     }
-    $cnt = file_get_contents($url);
+    $cnt = get_url($url, true);
     if ($cnt === false) {
         echo("\nCannot download $url\nError");
     } else {
@@ -136,13 +156,11 @@ function FUNC_download_release() {
     header('Content-type: text/plain');
     $url = stripslashes($_REQUEST['url']);
     if (!is_valid_url($url)) return;
-    $ch = curl_init($url);
+    $ch = get_url($url, true, true);
     $fp = fopen('_wp_dwnl_rel.zip', 'wb');
     curl_setopt($ch, CURLOPT_FILE, $fp);
-    curl_setopt($ch, CURLOPT_HEADER, 0);
     curl_setopt($ch, CURLOPT_PROGRESSFUNCTION, 'progress');
     curl_setopt($ch, CURLOPT_NOPROGRESS, false);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
     @curl_exec($ch);
     if(curl_error($ch)) {
         echo("\n");
@@ -150,7 +168,7 @@ function FUNC_download_release() {
         $output = "\nError";
     } else {
         $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        if ($status > 299) {
+        if ($status != 200) {
             $output = "\nHTTP status code: $status\nError";
         } else {
             $output = "\nOK";
@@ -262,6 +280,7 @@ function FUNC_cleanup() {
         @unlink('wp_downloader.php');
     }
     @unlink('_wp_dwnl_rel.zip');
+    @unlink('_wp_dwnl_cacert.pem');
     echo("\nOK");
 }
 
@@ -277,7 +296,7 @@ function show_page() {
 }
 
 function do_test() {
-    return isset($_REQUEST['test']) && !!$_REQUEST['test']; // TEST CONDITION
+    return /*BUILDVAR:test*/isset($_REQUEST['test']) && !!$_REQUEST['test']/**/;
 }
 
 if (isset($_REQUEST['func'])) {
