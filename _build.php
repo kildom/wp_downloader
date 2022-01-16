@@ -25,7 +25,7 @@ if (isset($argv[1]) && $argv[1] == 'keys') {
 
 $cnt = file_get_contents(__DIR__ . "/entry.php");
 $tst = $cnt;
-$build_vars = array();
+$build_vars = array('devel' => 'false');
 
 function include_repl($m) {
     return file_get_contents(__DIR__ . "/" . $m[1]);

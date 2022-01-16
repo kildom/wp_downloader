@@ -16,7 +16,7 @@
 </div>
 
 <div id="screen-options" class="screen" style="text-align: center;">
-    <a class="button-big" onclick="wrap(install);" href="javascript:// Download and Install WordPress">Download and Install<br>WordPress</a>
+    <a id="install" class="button-big" onclick="wrap(install);" href="javascript:// Download and Install WordPress">Download and Install<br>WordPress</a>
     <br><br>
     <table class="details">
         <tr>
@@ -45,7 +45,7 @@
             <td><span id="adv-options">None</span></td>
         </tr>
         <tr>
-            <td><br><a class="button-small" href="javascript:// Set Subfolder">Set Subfolder</a></td>
+            <td><br><a class="button-small" onclick="wrap(setFolder)" href="javascript:// Set Subfolder">Set Subfolder</a></td>
             <td><br><a class="button-small" href="javascript:// Advanced Options">Advanced Options</a></td>
         </tr>
     </table>
@@ -95,6 +95,16 @@
     </table>
 </div>
 
+<div id="popup-folder" class="popup"><br><br>
+<div>
+    <h1>Select folder</h1>
+    <input type="text" value="" class="text-input" id="folder" onkeydown="fixFolderName(this)" onkeyup="fixFolderName(this)" onkeypress="fixFolderName(this, event)"></input>
+    <br><br>
+    <div style="text-align: center">
+    <a onclick="wrap(folderSelected)" class="button-small" href="javascript:// OK">OK</a>
+    </div>
+</div>
+</div>
 
 <!--div id="drop-area">
     Drop your custom ZIP file here to install it.

@@ -242,6 +242,9 @@ function FUNC_unpack() {
             break;
         }
         $path = $dir . '/' . $name;
+        if (devel_mode()) {
+            $path = "temp/$path";
+        }
         if ($verify) {
             if (!file_exists($path)) {
                 $result = "\nFile $path does not exists\nError";
@@ -280,7 +283,9 @@ function FUNC_cleanup() {
         @unlink('wp_downloader.php');
     }
     @unlink('_wp_dwnl_rel.zip');
-    @unlink('_wp_dwnl_cacert.pem');
+    if (!devel_mode()) {
+        @unlink('_wp_dwnl_cacert.pem');
+    }
     echo("\nOK");
 }
 
@@ -297,6 +302,10 @@ function show_page() {
 
 function do_test() {
     return /*BUILDVAR:test*/isset($_REQUEST['test']) && !!$_REQUEST['test']/**/;
+}
+
+function devel_mode() {
+    return /*BUILDVAR:devel*/true/**/;
 }
 
 if (isset($_REQUEST['func'])) {

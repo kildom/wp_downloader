@@ -1,4 +1,7 @@
 
+let devel_mode = /*BUILDVAR:devel*/true/**/;
+
+
 function interpret_download(resolve, reject, response) {
     response = response.trimEnd();
     let pos = response.lastIndexOf('\n');
@@ -105,12 +108,34 @@ let releases_lang = 'English (default)';
 let releases_url = 'https://wordpress.org/download/releases/';
 let zips;
 let selected_zip;
+let subfolder = '';
+
+function getFolder(href) {
+    let url = new URL(href);
+    url.hash = '';
+    url.search = '';
+    let path = url.pathname;
+    let pos = path.lastIndexOf('/');
+    if (pos >= 0) {
+        path = path.substring(0, pos + 1);
+    }
+    url.pathname = path;
+    return url.href;
+}
 
 function show_options() {
     let ver = selected_zip.version;
     if (selected_zip == zips[0]) ver += ' (latest)';
     document.querySelector('#version').innerText = ver;
     document.querySelector('#lang').innerText = releases_lang;
+    let url = getFolder(location.href);
+    if (devel_mode) {
+        url += 'temp/';
+    }
+    if (subfolder != '') {
+        url += `${subfolder}/`;
+    }
+    document.querySelector('#destination').innerText = url;
     switchScreen('options');
 }
 
@@ -125,7 +150,7 @@ async function main() {
     let new_wpd_version = 'unknown';
     let update_needed = false;
     try {
-        let update_info = await download('auto_update', { });
+        let update_info = await download('auto_update', {});
         let update_response = {};
         for (let m of update_info.matchAll(/^([a-z]+):\s*(.*)$/gm)) {
             update_response[m[1].trim()] = m[2].trim();
@@ -231,22 +256,22 @@ async function install() {
     logAppend(' OK');
 
     logText(`Verifying hash of the ZIP file...`);
-    let zip_hash = await download('get_hash', { });
+    let zip_hash = await download('get_hash', {});
     zip_hash = parseHash(zip_hash);
     if (zip_hash != hash) throw Error(`Hashes does not match. Expected: ${hash}, downloaded: ${zip_hash}`);
     logAppend(' OK');
 
     logText(`Unpacking the ZIP file...`);
-    await download('unpack', { dir: 'temp' }, (done, total) => { // TODO: temp
+    await download('unpack', { dir: subfolder }, (done, total) => {
         if (done > 0 && total >= done) {
             logProgress(done / total);
         }
     });
     logProgress(1);
     logAppend(' OK');
-    
+
     logText(`Verifying unpacked files...`);
-    await download('unpack', { dir: 'temp', verify: 1 }, (done, total) => { // TODO: temp
+    await download('unpack', { dir: subfolder, verify: 1 }, (done, total) => {
         if (done > 0 && total >= done) {
             logProgress(done / total);
         }
@@ -256,22 +281,30 @@ async function install() {
 
     await cleanup();
 
+    startWordPressInstaller();
+}
+
+function startWordPressInstaller() {
     logText(`Redirecting to the installer...`);
-    setTimeout(() => { location.href = 'temp/'; }, 1000);
+    let path = subfolder + '/';
+    if (devel_mode) {
+        path = 'temp/' + path;
+    }
+    setTimeout(() => { location.href = path; }, 1000);
 }
 
 async function cleanup(force) {
-    
+
     logText(`Removing the ZIP file and a downloader itself...`);
     await download('cleanup', { keep_downloader: 1 });
     try {
-        let zip_hash = await download('get_hash', { });
+        let zip_hash = await download('get_hash', {});
         if (zip_hash != '0') throw Error(`Cannot delete downloader temporary files`);
     } catch (ex) {
-        if (force) await download('cleanup', { });
+        if (force) await download('cleanup', {});
         throw ex;
     }
-    await download('cleanup', { });
+    await download('cleanup', {});
     logAppend(' OK');
 }
 
@@ -303,8 +336,38 @@ async function abort() {
             https://github.com/kildom/wp_downloader/`);
 }
 
-async function wrap(func, ...args)
-{
+async function setFolder() {
+    let popup = document.querySelector('#popup-folder');
+    document.querySelector('#folder').value = subfolder;
+    popup.style.display = 'block';
+    document.querySelector('#folder').focus();
+}
+
+async function folderSelected() {
+    let popup = document.querySelector('#popup-folder');
+    subfolder = document.querySelector('#folder').value
+        .trim()
+        .replace(/[^a-z0-9_.,=+-]/ig, '_');
+    popup.style.display = 'none';
+    show_options();
+}
+
+function fixFolderName(input, event) {
+    let v = input.value
+        .trim()
+        .replace(/[^a-z0-9_.,=+-]/ig, '_');
+    if (input.value != v) {
+        let start = input.selectionStart;
+        let end = input.selectionEnd;
+        input.value = v;
+        input.setSelectionRange(start, end);
+    }
+    if (event && event.keyCode == 13) {
+        folderSelected();
+    }
+}
+
+async function wrap(func, ...args) {
     try {
         return await func.apply(undefined, args);
     } catch (ex) {

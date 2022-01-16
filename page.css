@@ -10,15 +10,19 @@ table {
     font-size: 100%;
 }
 
-div.screen {
+div.screen,
+div.popup>div {
     width: 600px;
-    display: none;
     margin: 30px auto 50px auto;
     border: 2px solid #ccc;
     background: #EEE;
     padding: 20px;
     border-radius: 8px;
     box-shadow: 4px 4px 17px 3px rgb(0 0 0 / 30%);
+}
+
+div.screen {
+    display: none;
 }
 
 div#screen-progress {
@@ -118,4 +122,23 @@ h1 {
 
 #current-wpd-version, #new-wpd-version {
     font-weight: bold;
+}
+
+div.popup {
+    position: fixed;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 5000;
+    display: none;
+}
+
+input.text-input {
+    font-family: monospace;
+    border: 1px solid #CCC;
+    padding: 5px;
+    margin: 0px;
+    width: 100%;
 }
