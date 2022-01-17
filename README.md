@@ -8,6 +8,10 @@ You have to place a single `wp_downloader.php` file to your server and start the
 
 Go to [releases](https://github.com/kildom/wp_downloader/releases/latest) to download latest `wp_downloader.php` file.
 
+## Demo
+
+![](resources/screen.apng)
+
 ## Fetures
 
 * Contained in a single `.php` file.
