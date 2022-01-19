@@ -8,9 +8,12 @@ function get_url($url, $secure = true, $prepare_only = false) {
         curl_setopt($ch, CURLOPT_USERAGENT, "WordPress Downloader PHP script");
     }
     if ($secure) {
+        if (gettype($secure) != 'string') {
+            $secure = __DIR__ . "/_wp_dwnl_cacert.pem";
+        }
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
-        if (file_exists(__DIR__ . "/_wp_dwnl_cacert.pem")) {
-            curl_setopt($ch, CURLOPT_CAINFO, __DIR__ . "/_wp_dwnl_cacert.pem");
+        if (file_exists($secure)) {
+            curl_setopt($ch, CURLOPT_CAINFO, $secure);
         }
     } else {
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
