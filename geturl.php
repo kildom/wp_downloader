@@ -1,6 +1,7 @@
 <?php
 
 function get_url($url, $secure = true, $prepare_only = false) {
+    echo("get_url $url\n");
     $ch = curl_init($url);
     if (isset($_SERVER['HTTP_USER_AGENT'])) {
         curl_setopt($ch, CURLOPT_USERAGENT, $_SERVER['HTTP_USER_AGENT']);
@@ -13,9 +14,13 @@ function get_url($url, $secure = true, $prepare_only = false) {
         }
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
         if (file_exists($secure)) {
+            echo("    cainfo $secure\n");
             curl_setopt($ch, CURLOPT_CAINFO, $secure);
+        } else {
+            echo("    cainfo from system\n");
         }
     } else {
+        echo("    do not verify\n");
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
     }
     curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
@@ -36,6 +41,7 @@ function get_url($url, $secure = true, $prepare_only = false) {
             $res = false;
         }
     }
+    echo("    " . strlen($res) . "\n");
     curl_close($ch);
     return $res;
 }
