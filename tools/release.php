@@ -51,7 +51,6 @@ $info = array(
 
 update_cacert("$prev_release_dir/cacert.pem", "$release_dir/cacert.pem", $github_cert);
 
-$info['cacert_hash'] = hash_file('sha256', "$release_dir/cacert.pem");
 $info['github_cert'] = $github_cert;
 
 # Create and sign info.json

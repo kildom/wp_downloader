@@ -197,7 +197,7 @@ async function do_update(with_download) {
 async function load_releases() {
     switchScreen('progress');
     let releases_page;
-    for (let i = 0; i < 3; i++) {
+    for (let i = 1; i <= 3; i++) {
         try {
             logText(`Loading releases from: ${releases_url}...`);
             releases_page = await download('download_page', { url: releases_url });
