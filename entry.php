@@ -2,14 +2,8 @@
 <?php
 
 $version = /*BUILDVAR:version*/'v9999.99.99'/**/;
-//$version = 'v0.0.0';
-$cacert_url = /*BUILDVAR:cacert_url*/'https://curl.se/ca/cacert-2021-10-26.pem'/**/;
-$cacert_hash = /*BUILDVAR:cacert_hash*/'cb6545d71a1f4d3e3ab93541c97a6b8e3131a5ae'/**/;
-$cacert_latest_url = 'https://curl.se/ca/cacert.pem';
-$update_url = 'https://api.github.com/repos/kildom/wp_downloader/releases/latest';
-$html_update_url = 'https://github.com/kildom/wp_downloader/releases/latest';
-$html_update_regex = '/href=".*\/wp_downloader\/releases\/download\/([^"]*)\/([^"]*\.php)"/';
-$html_update_prefix = 'https://github.com/kildom/wp_downloader/releases/download';
+$cacert_url = 'https://curl.se/ca/cacert.pem';
+$update_url = 'https://raw.githubusercontent.com/kildom/wp_downloader/releases';
 $public_key = "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEIk7ZCuaV8jp+A5MxdivJM+LCqXiv\nKVQJijYssSjx5L5cvLofKa74tpdY4UF4Dfcb/8Bu6ZUN39KIj4YNHVb1KA==\n-----END PUBLIC KEY-----\n";
 $backup_public_key = "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEuc9S0sE8ANEFnsOCOlUZRI1jV/C1\nvUzJkwieSBzv3I4X6aHbl6YaBXwXtDeZLFW+dEMdu2HikrxOQYi6SSAqaQ==\n-----END PUBLIC KEY-----\n";
 
@@ -17,112 +11,87 @@ function is_valid_url($url) {
     return preg_match_all('/^https:\/\/([a-z_0-9-.]+\.)?wordpress\.org\/.*$/', $url);
 }
 
-function FUNC_auto_update() {
-    global $version, $update_url, $html_update_url, $html_update_regex, $html_update_prefix;
+function decode_and_verify($file) {
     global $public_key, $backup_public_key;
+    $info = json_decode($file, false);
+    $sig = $info->signature;
+    $file = str_replace($sig, '###SIGNATURE###', $file);
+    $res = openssl_verify($file, base64_decode($sig), $public_key, OPENSSL_ALGO_SHA256);
+    if ($res !== 1) {
+        $res = openssl_verify($file, base64_decode($sig), $backup_public_key, OPENSSL_ALGO_SHA256);
+    }
+    if ($res !== 1) {
+        echo("\nInvalid signature\nError");
+        return false;
+    }
+    return $info;
+}
+
+function FUNC_auto_update() {
+    global $version, $update_url;
     header('Content-type: text/plain');
     $update = isset($_REQUEST['update']) ? intval($_REQUEST['update']) : 0;
-    $json = get_url($update_url, false);
-    $cnt = json_decode($json, false);
-    $download_url = null;
-    $new_version = $cnt->tag_name;
-    if (!$new_version) {
-        $html = get_url($html_update_url, false);
-        if (!preg_match($html_update_regex, $html, $m) || !$m) {
-            echo($json);
-            echo($html);
-            echo("\nUnable to read release information\nError");
+    $file = get_url("$update_url/info.json", true);
+    if (!$file) {
+        $file = get_url("$update_url/info.json", false);
+        $info = decode_and_verify($file);
+        if (!$info) {
             return;
         }
-        $new_version = $m[1];
-        $download_url = "$html_update_prefix/$m[1]/$m[2]";
+        file_put_contents(__DIR__ . '/_wp_dwnl_cacert.pem', $info->github_cert);
+        $file = get_url("$update_url/info.json", true);
     }
-    if (strnatcasecmp($version, $new_version) >= 0) {
+    if (!$file) {
+        echo("\nCannot download release information file\nError");
+        return;
+    }
+    $info = decode_and_verify($file);
+    if (!$info) {
+        return;
+    }
+    if (strnatcasecmp($version, $info->version) >= 0) {
         echo("current: $version\n");
-        echo("new: $new_version\n");
+        echo("new: $info->version\n");
         echo("update: 0\n");
         echo("OK");
         return;
     }
     if (!$update) {
         echo("current: $version\n");
-        echo("new: $new_version\n");
+        echo("new: $info->version\n");
         echo("update: 1\n");
         echo("OK");
         return;
     }
-    if ($download_url === null) {
-        foreach ($cnt->assets as $asset) {
-            if (strrchr($asset->name, '.') == '.php') {
-                $download_url = $asset->browser_download_url;
-            }
-        }
-    }
-    if ($download_url === null) {
-        echo("\nAsset not found in latest release\nError");
-        return;
-    }
-    
-    $update_file = get_url($download_url, false);
 
-    $pos = strrpos($update_file, '/*');
-    if (!$pos) {
-        echo("\nMissing signature\nError");
+    $update_file = get_url("$update_url/$info->name", true);
+    if (!$update_file) {
+        echo("\nCannot download update file\nError");
         return;
     }
-    $sig = substr($update_file, $pos + 2);
-    $data = substr($update_file, 0, $pos);
-    $data = rtrim($data);
-    $pos = strrpos($sig, '*/');
-    if (!$pos) {
-        echo("\nMissing signature\nError");
+    $update_hash = hash('sha256', $update_file);
+
+    if (strtolower($update_hash) != strtolower($info->hash)) {
+        echo("\nInvalid hash of the update file\nError");
         return;
     }
-    if (trim(substr($sig, $pos + 2)) != '') {
-        echo("\nInvalid data after the signature\nError");
-        return;
-    }
-    $sig = substr($sig, 0, $pos);
-    $res = openssl_verify($data, base64_decode($sig), $public_key, OPENSSL_ALGO_SHA256);
-    if ($res !== 1) {
-        $res = openssl_verify($data, base64_decode($sig), $backup_public_key, OPENSSL_ALGO_SHA256);
-    }
-    if ($res !== 1) {
-        echo("\nInvalid signature\nError");
-        return;
-    }
+
     file_put_contents('wp_downloader.php', $update_file); // TODO: different name
     echo($update_file);
     echo("\nOK");
 }
 
 function FUNC_cacert_fix() {
-    global $cacert_url, $cacert_hash, $cacert_latest_url;
+    global $cacert_url, $update_url;
     header('Content-type: text/plain');
     $level = intval($_REQUEST['level']);
-    if ($level > 0 && !cacert_exists()) {
-        echo("\nInvalid state\nError");
+    $url = $level == 1 ? "$update_url/cacert.pem" : $cacert_url;
+    $cacert = get_url($url, true);
+    if (!$cacert) {
+        echo("\nCannot download cacert from $url\nError");
         return;
     }
-    if ($level == 0) {
-        $cacert = get_url($cacert_url, false);
-        if (!$cacert) {
-            echo("\nCannot download cacert\nError");
-            return;
-        }
-        if (sha1($cacert) != $cacert_hash) {
-            echo("\nInvalid cacert hash\nError");
-            return;
-        }
-        file_put_contents("_wp_dwnl_cacert.pem", $cacert);
-    } else {
-        $cacert = get_url($cacert_latest_url, true);
-        if (!$cacert) {
-            echo("\nCannot download cacert\nError");
-            return;
-        }
-        file_put_contents("_wp_dwnl_cacert.pem", $cacert);
-    }
+    file_put_contents("_wp_dwnl_cacert.pem", $cacert);
     echo("\nOK");
 }
 
