@@ -8,7 +8,11 @@ $public_key = "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEI
 $backup_public_key = "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEuc9S0sE8ANEFnsOCOlUZRI1jV/C1\nvUzJkwieSBzv3I4X6aHbl6YaBXwXtDeZLFW+dEMdu2HikrxOQYi6SSAqaQ==\n-----END PUBLIC KEY-----\n";
 
 function is_valid_url($url) {
-    return preg_match_all('/^https:\/\/([a-z_0-9-.]+\.)?wordpress\.org\/.*$/', $url);
+    $res = preg_match_all('/^https:\/\/([a-z_0-9-.]+\.)?wordpress\.org\/.*$/', $url);
+    if (!$res) {
+        echo("URL not allowed: $url");
+    }
+    return $res;
 }
 
 function decode_and_verify($file) {
@@ -17,8 +21,10 @@ function decode_and_verify($file) {
     $sig = $info->signature;
     $file = str_replace($sig, '###SIGNATURE###', $file);
     $res = openssl_verify($file, base64_decode($sig), $public_key, OPENSSL_ALGO_SHA256);
+    echo("Signature verification result: $res\n");
     if ($res !== 1) {
         $res = openssl_verify($file, base64_decode($sig), $backup_public_key, OPENSSL_ALGO_SHA256);
+        echo("Signature verification result with backup key: $res\n");
     }
     if ($res !== 1) {
         echo("\nInvalid signature\nError");
@@ -33,11 +39,13 @@ function FUNC_auto_update() {
     $update = isset($_REQUEST['update']) ? intval($_REQUEST['update']) : 0;
     $file = get_url("$update_url/info.json", true);
     if (!$file) {
+        echo("Reading release info failed. Trying connection without peer verification...\n");
         $file = get_url("$update_url/info.json", false);
         $info = decode_and_verify($file);
         if (!$info) {
             return;
         }
+        echo("Applying temporary cainfo for github only...\n");
         file_put_contents(__DIR__ . '/_wp_dwnl_cacert.pem', $info->github_cert);
         $file = get_url("$update_url/info.json", true);
     }
@@ -45,6 +53,7 @@ function FUNC_auto_update() {
         echo("\nCannot download release information file\nError");
         return;
     }
+    echo("Release info content:\n$file\n--------------\n");
     $info = decode_and_verify($file);
     if (!$info) {
         return;
@@ -77,7 +86,7 @@ function FUNC_auto_update() {
     }
 
     file_put_contents('wp_downloader.php', $update_file); // TODO: different name
-    echo($update_file);
+    echo("<<<<<=====$update_file=====>>>>>");
     echo("\nOK");
 }
 
@@ -106,7 +115,7 @@ function FUNC_download_page() {
     if ($cnt === false) {
         echo("\nCannot download $url\nError");
     } else {
-        echo($cnt);
+        echo("<<<<<=====$cnt=====>>>>>");
         echo("\nOK");
     }
 }
@@ -115,7 +124,7 @@ function progress($url, $a, $b, $c, $d)
 {
     global $progress_last_value;
     if (!isset($progress_last_value) || $b > $progress_last_value + 128 * 1024) {
-        echo("$b/$a" . str_repeat(' ', 1024) . "\n");
+        echo("=>$b/$a" . str_repeat(' ', 1024) . "\n");
         flush();
         $progress_last_value = $b;
     }
@@ -199,7 +208,7 @@ function FUNC_unpack() {
     $result = "\nOK";
     for ($i=0; $i < $za->numFiles; $i++) {
         if ($i % 20 == 0) {
-            echo($i . '/' . $za->numFiles . str_repeat(' ', 1024) . "\n");
+            echo("=>$i/" . $za->numFiles . str_repeat(' ', 1024) . "\n");
             flush();
         }
         $name = $za->getNameIndex($i);

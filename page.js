@@ -22,11 +22,28 @@ function interpret_download(resolve, reject, response) {
         reject(Error('Invalid response from server'));
         return;
     }
+    let log = response;
+    let start = response.indexOf('<<<<<=====');
+    if (start >= 0) {
+        let end = response.lastIndexOf('=====>>>>>');
+        if (end >= 0) {
+            let part = response.substring(start + 10, end);
+            log = `${response.substring(0, start + 10)} ... ${response.substring(end)}`;
+            response = part;
+        }
+    }
+    log = log.replace(/\n=>[0-9]+\/[0-9]+ +/g, '');
+    console.log(`Response: ${log}`);
     resolve(response);
 }
 
 function download(func, data, progress) {
     return new Promise((resolve, reject) => {
+        let body = Object.entries(data)
+            .concat([['func', func]])
+            .map(([key, val]) => encodeURIComponent(key) + '=' + encodeURIComponent(val))
+            .join('&');
+        console.log(`Requesting: ${body}`);
         var xhr = new XMLHttpRequest();
         xhr.onreadystatechange = function () {
             if (this.readyState === XMLHttpRequest.DONE) {
@@ -38,7 +55,7 @@ function download(func, data, progress) {
             }
         }
         if (progress) {
-            let re = new RegExp(/\n([0-9]+)\/([0-9]+)\s+/mg);
+            let re = new RegExp(/\n=>([0-9]+)\/([0-9]+) +/mg);
             xhr.onprogress = function () {
                 if (this.readyState === XMLHttpRequest.LOADING) {
                     let part = this.responseText;
@@ -52,10 +69,6 @@ function download(func, data, progress) {
         }
         xhr.open("POST", '?');
         xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
-        let body = Object.entries(data)
-            .concat([['func', func]])
-            .map(([key, val]) => encodeURIComponent(key) + '=' + encodeURIComponent(val))
-            .join('&');
         xhr.send(body);
     });
 }
