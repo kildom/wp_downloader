@@ -16,13 +16,13 @@ if (!$info) {
     exit(1);
 }
 
-$changed = update_cacert("$prev_release_dir/cacert.pem", "$release_dir/cacert.pem", $github_cert);
+$changed = update_cacert("$prev_release_dir/cacert.pem", "$release_dir/cacert.pem", $small_cert);
 
 if (!$changed) {
     unlink("$release_dir/cacert.pem");
 }
 
-if ($github_cert != $info['github_cert']) {
-    $info['github_cert'] = $github_cert;
+if ($small_cert != $info['small_cert']) {
+    $info['small_cert'] = $small_cert;
     sign_and_write_json("$release_dir/info.json", $info);
 }

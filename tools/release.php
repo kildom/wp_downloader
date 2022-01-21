@@ -49,9 +49,9 @@ $info = array(
 
 # Download cacert.pem and extract github.pem
 
-update_cacert("$prev_release_dir/cacert.pem", "$release_dir/cacert.pem", $github_cert);
+update_cacert("$prev_release_dir/cacert.pem", "$release_dir/cacert.pem", $small_cert);
 
-$info['github_cert'] = $github_cert;
+$info['small_cert'] = $small_cert;
 
 # Create and sign info.json
 
