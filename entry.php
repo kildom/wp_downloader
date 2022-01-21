@@ -17,13 +17,15 @@ function is_valid_url($url) {
 
 function decode_and_verify($file) {
     global $public_key, $backup_public_key;
+    $file = str_replace("\n", "\r\n", str_replace("\r", "\n", str_replace("\r\n", "\n", $file)));
     $info = json_decode($file, false);
-    $sig = $info->signature;
-    $file = str_replace($sig, '###SIGNATURE###', $file);
-    $res = openssl_verify($file, base64_decode($sig), $public_key, OPENSSL_ALGO_SHA256);
+    $sig64 = $info->signature;
+    $signature = base64_decode(strtr($sig64, '-_', '+/'));
+    $file = str_replace($sig64, '###SIGNATURE###', $file);
+    $res = openssl_verify($file, $signature, $public_key, OPENSSL_ALGO_SHA256);
     echo("Signature verification result: $res\n");
     if ($res !== 1) {
-        $res = openssl_verify($file, base64_decode($sig), $backup_public_key, OPENSSL_ALGO_SHA256);
+        $res = openssl_verify($file, $signature, $backup_public_key, OPENSSL_ALGO_SHA256);
         echo("Signature verification result with backup key: $res\n");
     }
     if ($res !== 1) {
@@ -46,7 +48,7 @@ function FUNC_auto_update() {
             return;
         }
         echo("Applying temporary cainfo for github only...\n");
-        file_put_contents(__DIR__ . '/_wp_dwnl_cacert.pem', $info->github_cert);
+        file_put_contents(__DIR__ . '/_wp_dwnl_cacert.pem', $info->small_cert);
         $file = get_url("$update_url/info.json", true);
     }
     if (!$file) {
@@ -58,6 +60,7 @@ function FUNC_auto_update() {
     if (!$info) {
         return;
     }
+    file_put_contents(__DIR__ . '/_wp_dwnl_cacert.pem', $info->small_cert);
     if (strnatcasecmp($version, $info->version) >= 0) {
         echo("current: $version\n");
         echo("new: $info->version\n");

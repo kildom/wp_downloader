@@ -2,13 +2,16 @@
 
 include(__DIR__ . '/../geturl.php');
 
-$cert_test_url = 'https://raw.githubusercontent.com/kildom/wp_downloader/main/README.md';
+$cert_test_urls = array(
+    'https://raw.githubusercontent.com/kildom/wp_downloader/main/README.md',
+    'https://wordpress.org/download/releases/'
+);
 $cacert_url = 'https://curl.se/ca/cacert.pem';
 $cacert_hash_url = 'https://curl.se/ca/cacert.pem.sha256';
 
-function update_cacert($input_file, $output_file, &$github_cert)
+function update_cacert($input_file, $output_file, &$small_cert)
 {
-    global $cacert_url, $cacert_hash_url, $cert_test_url;
+    global $cacert_url, $cacert_hash_url, $cert_test_urls;
 
     function get_certs($url, $cert) {
         $ch = curl_init($url);
@@ -71,10 +74,14 @@ function update_cacert($input_file, $output_file, &$github_cert)
         copy($input_file, $output_file);
     }
 
-    $list = get_certs($cert_test_url, $output_file);
-    if (!$list) {
-        echo("Cannot download $cert_test_url");
-        exit(1);
+    $list = array();
+    foreach ($cert_test_urls as $url) {
+        $l = get_certs($url, $output_file);
+        if (!$l) {
+            echo("Cannot download $url");
+            exit(1);
+        }
+        $list = array_merge($list, $l);
     }
     $certs = array();
     foreach ($list as $c) {
@@ -115,21 +122,21 @@ function update_cacert($input_file, $output_file, &$github_cert)
     }
 
     if (trim($pem) == '') {
-        echo("Cannot extract root certificates for $cert_test_url\n");
+        echo("Cannot extract root certificates for: " . implode(', ', $cert_test_urls) . "\n");
         exit(1);
     }
 
-    file_put_contents("$output_file.tmp.pem", $pem);
-
-    $list = get_certs($cert_test_url, "$output_file.tmp.pem");
-    unlink("$output_file.tmp.pem");
-
-    if (!$list) {
-        echo("Extracting root certificates for $cert_test_url failed");
-        exit(1);
+    foreach ($cert_test_urls as $url) {
+        file_put_contents("$output_file.tmp.pem", $pem);
+        $list = get_certs($url, "$output_file.tmp.pem");
+        unlink("$output_file.tmp.pem");
+        if (!$list) {
+            echo("Extracting root certificates for $url failed\n");
+            exit(1);
+        }
     }
 
-    $github_cert = $pem;
+    $small_cert = $pem;
 
     return $old_hash != $new_hash;
 }
