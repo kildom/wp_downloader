@@ -1,0 +1,58 @@
+name: Create Release
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release Tag'     
+        required: true
+        default: 'v'
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: Checkout previous release
+        uses: actions/checkout@v2
+        with:
+          ref: releases
+          path: prev_release
+          fetch-depth: 0
+      - name: Build release
+        env:
+          BUILD_PRIVATE_KEY: ${{ secrets.BUILD_PRIVATE_KEY }}
+        run: |
+          git tag ${{ github.event.inputs.tag_name }}
+          php tools/release.php
+      - name: Copy to releases repo
+        run: |
+          cp release/* prev_release/
+          ls -la prev_release/
+          ls -la release/
+          echo commit_hash=`git rev-parse HEAD` >> $GITHUB_ENV
+      - name: Build Artifact
+        uses: actions/upload-artifact@v2.3.1
+        with:
+          name: Release content
+          path: release/*
+          if-no-files-found: error
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release/wp_downloader.php
+          draft: true
+          tag_name: ${{ github.event.inputs.tag_name }}
+          fail_on_unmatched_files: true
+          target_commitish: ${{ env.commit_hash }}
+          generate_release_notes: true
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v3.12.0
+        with:
+          path: prev_release
+          commit-message: Release ${{ github.event.inputs.tag_name }}
+          branch: releases-patch-${{ github.event.inputs.tag_name }}
+          base: releases
+          title: Release ${{ github.event.inputs.tag_name }}
+          draft: true
