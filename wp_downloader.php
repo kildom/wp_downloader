@@ -54,7 +54,7 @@ function cacert_exists()
 ?>
 <?php
 
-$version = 'v0.0.5';
+$version = 'v0.0.5-6-g563364e';
 $cacert_url = 'https://curl.se/ca/cacert.pem';
 $update_url = 'https://raw.githubusercontent.com/kildom/wp_downloader/releases';
 $public_key = "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEIk7ZCuaV8jp+A5MxdivJM+LCqXiv\nKVQJijYssSjx5L5cvLofKa74tpdY4UF4Dfcb/8Bu6ZUN39KIj4YNHVb1KA==\n-----END PUBLIC KEY-----\n";
