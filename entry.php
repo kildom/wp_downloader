@@ -180,12 +180,12 @@ function FUNC_unpack() {
     if (isset($_REQUEST['chmod_php'])) {
         $chmod_php = intval($_REQUEST['chmod_php'], 0);
     } else {
-        $chmod_php = 0644;
+        $chmod_php = -1;
     }
     if (isset($_REQUEST['chmod_others'])) {
         $chmod_others = intval($_REQUEST['chmod_others'], 0);
     } else {
-        $chmod_others = 0644;
+        $chmod_others = -1;
     }
     if (isset($_REQUEST['dir'])) {
         $dir = preg_replace('/[^a-z0-9_.,=+-]/i', '_', $_REQUEST['dir']);
@@ -248,9 +248,13 @@ function FUNC_unpack() {
                 break;
             }
             if (substr($name, -4) == '.php') {
-                chmod($path, $chmod_php);
+                if ($chmod_php >= 0) {
+                    chmod($path, $chmod_php);
+                }
             } else {
-                chmod($path, $chmod_others);
+                if ($chmod_others >= 0) {
+                    chmod($path, $chmod_others);
+                }
             }
         }
     }

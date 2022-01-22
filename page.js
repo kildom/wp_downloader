@@ -122,6 +122,9 @@ let releases_url = 'https://wordpress.org/download/releases/';
 let zips;
 let selected_zip;
 let subfolder = '';
+let chmod = false;
+let chmodPHP = 0755;
+let chmodOther = 0644;
 
 function getFolder(href) {
     let url = new URL(href);
@@ -149,6 +152,7 @@ function show_options() {
         url += `${subfolder}/`;
     }
     document.querySelector('#destination').innerText = url;
+    document.querySelector('#adv-options').innerText = chmod ? `chmod ${numToChmod(chmodOther)} *.*; chmod ${numToChmod(chmodPHP)} *.php` : 'None'
     switchScreen('options');
 }
 
@@ -275,7 +279,12 @@ async function install() {
     logAppend(' OK');
 
     logText(`Unpacking the ZIP file...`);
-    await download('unpack', { dir: subfolder }, (done, total) => {
+    let unpackOptions = { dir: subfolder };
+    if (chmod) {
+        unpackOptions.chmod_php = numToChmod(chmodPHP);
+        unpackOptions.chmod_others = numToChmod(chmodOther);
+    }
+    await download('unpack', unpackOptions, (done, total) => {
         if (done > 0 && total >= done) {
             logProgress(done / total);
         }
@@ -354,6 +363,56 @@ async function setFolder() {
     document.querySelector('#folder').value = subfolder;
     popup.style.display = 'block';
     document.querySelector('#folder').focus();
+}
+
+function numToChmod(num)
+{
+    let ret = '0000' + parseInt(num).toString(8);
+    return ret.substring(ret.length - 4);
+}
+
+function updateChmod() {
+    document.querySelector('#chmod_values').style.display = document.querySelector('#chmod').checked ? 'block' : 'none';
+}
+
+async function setChmod() {
+    let popup = document.querySelector('#popup-chmod');
+    document.querySelector('#chmod_php').value = numToChmod(chmodPHP);
+    document.querySelector('#chmod_other').value = numToChmod(chmodOther);
+    document.querySelector('#chmod').checked = chmod;
+    document.querySelector('#chmod_values').style.display = document.querySelector('#chmod').checked ? 'block' : 'none';
+    popup.style.display = 'block';
+    document.querySelector('#chmod').focus();
+}
+
+function fixChmod(input, event) {
+    let v = input.value
+        .trim()
+        .replace(/[^0-7]/ig, '');
+    if (!v.startsWith('0')) {
+        v = '0' + v;
+    }
+    if (v.length > 4) {
+        v = v.substring(0, 4);
+    }
+    if (input.value != v) {
+        let start = input.selectionStart;
+        let end = input.selectionEnd;
+        input.value = v;
+        input.setSelectionRange(start, end);
+    }
+    if (event && event.keyCode == 13) {
+        chmodSelected();
+    }
+}
+
+async function chmodSelected() {
+    let popup = document.querySelector('#popup-chmod');
+    chmodPHP = parseInt(document.querySelector('#chmod_php').value, 8);
+    chmodOther = parseInt(document.querySelector('#chmod_other').value, 8);
+    chmod = !!document.querySelector('#chmod').checked;
+    popup.style.display = 'none';
+    show_options();
 }
 
 async function folderSelected() {

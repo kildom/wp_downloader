@@ -45,7 +45,7 @@
         </tr>
         <tr>
             <td><br><a class="button-small" onclick="wrap(setFolder)" href="javascript:// Set Subfolder">Set Subfolder</a></td>
-            <td><br><a class="button-small" href="javascript:// Advanced Options">Advanced Options</a></td>
+            <td><br><a class="button-small" onclick="wrap(setChmod)" href="javascript:// Advanced Options">Advanced Options</a></td>
         </tr>
     </table>
 </div>
@@ -101,6 +101,30 @@
     <br><br>
     <div style="text-align: center">
     <a onclick="wrap(folderSelected)" class="button-small" href="javascript:// OK">OK</a>
+    </div>
+</div>
+</div>
+
+<div id="popup-chmod" class="popup"><br><br>
+<div>
+    <h1>Advanced options</h1>
+    <input type="checkbox" id="chmod" onchange="updateChmod()">
+    <label for="chmod">Change file permissions (chmod) after unpacking WordPress.</label>
+    <table id="chmod_values">
+        <tr><td>
+            <input type="text" style="width: 80px" value="0755" class="text-input" id="chmod_php" onkeydown="fixChmod(this)" onkeyup="fixChmod(this)" onkeypress="fixChmod(this, event)"></input>
+        </td><td>
+            PHP files linux permissions
+        </td></tr>
+        <tr><td>
+            <input type="text" style="width: 80px" value="0644" class="text-input" id="chmod_other" onkeydown="fixChmod(this)" onkeyup="fixChmod(this)" onkeypress="fixChmod(this, event)"></input>
+        </td><td>
+            Other files linux permissions
+        </td></tr>
+    </table>
+    <br><br>
+    <div style="text-align: center">
+    <a onclick="wrap(chmodSelected)" class="button-small" href="javascript:// OK">OK</a>
     </div>
 </div>
 </div>
