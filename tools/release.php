@@ -1,7 +1,7 @@
 <?php
 
-include(__DIR__ . '/cacert.php');
-include(__DIR__ . '/json.php');
+include(__DIR__ . '/_cacert.php');
+include(__DIR__ . '/_json.php');
 
 $root_dir = __DIR__ . "/..";
 $prev_release_dir = "$root_dir/prev_release";
@@ -43,8 +43,7 @@ copy("$root_dir/$downloader_file_name", "$release_dir/$downloader_file_name");
 $info = array(
     'version' => $build_version,
     'hash' => hash_file('sha256', "$release_dir/$downloader_file_name"),
-    'name' => $downloader_file_name,
-    'signature' => '###SIGNATURE###'
+    'name' => $downloader_file_name
 );
 
 # Download cacert.pem and extract github.pem

@@ -1,4 +1,3 @@
-# This is a basic workflow to help you get started with Actions
 
 name: CI
 
@@ -28,3 +27,7 @@ jobs:
           name: Downloader
           path: wp_downloader.php
   
+#TODO:
+# start php test sever
+# run test_wp_downloader.php self-test script from main
+# run test_wp_downloader.php from releases branch (TODO: add also test_wp_downaldoer.php to releases branch)

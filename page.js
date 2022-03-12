@@ -214,20 +214,9 @@ async function do_update(with_download) {
 async function load_releases() {
     switchScreen('progress');
     let releases_page;
-    for (let i = 1; i <= 3; i++) {
-        try {
-            logText(`Loading releases from: ${releases_url}...`);
-            releases_page = await download('download_page', { url: releases_url });
-            logAppend(' OK');
-            break;
-        } catch (ex) {
-            logAppend(' ERROR');
-            if (i == 3) throw ex;
-            logText(`Applying SSL cacert workaround level ${i}...`);
-            await download('cacert_fix', { level: i });
-            logAppend(' OK');
-        }
-    }
+    logText(`Loading releases from: ${releases_url}...`);
+    releases_page = await download('download_page', { url: releases_url });
+    logAppend(' OK');
     zips = [];
     for (let match of releases_page.matchAll(/href="([^"]+-([0-9\.]+\.[0-9\.]+[^"]*).zip)"/gi)) {
         zips.push({
