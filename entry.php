@@ -3,9 +3,11 @@
 
 $version = /*BUILDVAR:version*/'v9999.99.99'/**/;
 $cacert_url = 'https://curl.se/ca/cacert.pem';
+$github_cacert_url = 'https://raw.githubusercontent.com/kildom/wp_downloader/releases/cacert.pem';
 $update_url = 'https://raw.githubusercontent.com/kildom/wp_downloader/releases';
 $public_key = "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEIk7ZCuaV8jp+A5MxdivJM+LCqXiv\nKVQJijYssSjx5L5cvLofKa74tpdY4UF4Dfcb/8Bu6ZUN39KIj4YNHVb1KA==\n-----END PUBLIC KEY-----\n";
 $backup_public_key = "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEuc9S0sE8ANEFnsOCOlUZRI1jV/C1\nvUzJkwieSBzv3I4X6aHbl6YaBXwXtDeZLFW+dEMdu2HikrxOQYi6SSAqaQ==\n-----END PUBLIC KEY-----\n";
+$valid_period = 60 * 60 * 24 * 60;
 
 function is_valid_url($url) {
     $res = preg_match_all('/^https:\/\/([a-z_0-9-.]+\.)?wordpress\.org\/.*$/', $url);
@@ -16,8 +18,8 @@ function is_valid_url($url) {
 }
 
 function decode_and_verify($file) {
-    global $public_key, $backup_public_key;
-    $file = str_replace("\n", "\r\n", str_replace("\r", "\n", str_replace("\r\n", "\n", $file)));
+    global $public_key, $backup_public_key, $valid_period;
+    $file = trim(str_replace("\n", "\r\n", str_replace("\r", "\n", str_replace("\r\n", "\n", $file))));
     $info = json_decode($file, false);
     $sig64 = $info->signature;
     $signature = base64_decode(strtr($sig64, '-_', '+/'));
@@ -32,6 +34,10 @@ function decode_and_verify($file) {
         echo("\nInvalid signature\nError");
         return false;
     }
+    if (time() - $info->timestamp > $valid_period) {
+        echo("\nRelease JSON too old\nError");
+        return false;
+    }
     return $info;
 }
 
@@ -39,7 +45,7 @@ function FUNC_auto_update() {
     global $version, $update_url;
     header('Content-type: text/plain');
     $update = isset($_REQUEST['update']) ? intval($_REQUEST['update']) : 0;
-    $file = get_url("$update_url/info.json", true);
+    $file = get_url_secure("$update_url/info.json");
     if (!$file) {
         echo("Reading release info failed. Trying connection without peer verification...\n");
         $file = get_url("$update_url/info.json", false);
@@ -47,9 +53,9 @@ function FUNC_auto_update() {
         if (!$info) {
             return;
         }
-        echo("Applying temporary cainfo for github only...\n");
-        file_put_contents(__DIR__ . '/_wp_dwnl_cacert.pem', $info->small_cert);
-        $file = get_url("$update_url/info.json", true);
+        echo("Applying temporary cainfo...\n");
+        file_put_contents(cacert_file_level(0, false), $info->small_cert);
+        $file = get_url_secure("$update_url/info.json");
     }
     if (!$file) {
         echo("\nCannot download release information file\nError");
@@ -60,7 +66,7 @@ function FUNC_auto_update() {
     if (!$info) {
         return;
     }
-    file_put_contents(__DIR__ . '/_wp_dwnl_cacert.pem', $info->small_cert);
+    file_put_contents(cacert_file_level(0, false), $info->small_cert);
     if (strnatcasecmp($version, $info->version) >= 0) {
         echo("current: $version\n");
         echo("new: $info->version\n");
@@ -76,7 +82,7 @@ function FUNC_auto_update() {
         return;
     }
 
-    $update_file = get_url("$update_url/$info->name", true);
+    $update_file = get_url_secure("$update_url/$info->name");
     if (!$update_file) {
         echo("\nCannot download update file\nError");
         return;
@@ -93,20 +99,6 @@ function FUNC_auto_update() {
     echo("\nOK");
 }
 
-function FUNC_cacert_fix() {
-    global $cacert_url, $update_url;
-    header('Content-type: text/plain');
-    $level = intval($_REQUEST['level']);
-    $url = $level == 1 ? "$update_url/cacert.pem" : $cacert_url;
-    $cacert = get_url($url, true);
-    if (!$cacert) {
-        echo("\nCannot download cacert from $url\nError");
-        return;
-    }
-    file_put_contents("_wp_dwnl_cacert.pem", $cacert);
-    echo("\nOK");
-}
-
 function FUNC_download_page() {
     header('Content-type: text/plain');
     $url = stripslashes($_REQUEST['url']);
@@ -114,7 +106,7 @@ function FUNC_download_page() {
         echo("\nInvalid URL\nError");
         return;
     }
-    $cnt = get_url($url, true);
+    $cnt = get_url_secure($url);
     if ($cnt === false) {
         echo("\nCannot download $url\nError");
     } else {
@@ -137,7 +129,7 @@ function FUNC_download_release() {
     header('Content-type: text/plain');
     $url = stripslashes($_REQUEST['url']);
     if (!is_valid_url($url)) return;
-    $ch = get_url($url, true, true);
+    $ch = get_url_secure($url, true);
     $fp = fopen('_wp_dwnl_rel.zip', 'wb');
     curl_setopt($ch, CURLOPT_FILE, $fp);
     curl_setopt($ch, CURLOPT_PROGRESSFUNCTION, 'progress');
@@ -264,13 +256,17 @@ function FUNC_unpack() {
 function FUNC_cleanup() {
     header('Content-type: text/plain');
     $keep_downloader = isset($_REQUEST['keep_downloader']) ? intval($_REQUEST['keep_downloader']) : 0;
-    if (!$keep_downloader) {
-        @unlink('wp_downloader.php');
+    if (!devel_mode()) {
+        if (!$keep_downloader) {
+            @unlink(__FILE__);
+        }
+        @unlink(cacert_file_level(0, false));
+        @unlink(cacert_file_level(1, false));
+        @unlink(cacert_file_level(2, false));
+        @unlink(cacert_file_level(3, false));
+        @unlink(cacert_file_level(4, false));
     }
     @unlink('_wp_dwnl_rel.zip');
-    if (!devel_mode()) {
-        @unlink('_wp_dwnl_cacert.pem');
-    }
     echo("\nOK");
 }
 

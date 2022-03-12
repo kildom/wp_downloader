@@ -3,8 +3,9 @@
 include(__DIR__ . '/../geturl.php');
 
 $cert_test_urls = array(
-    'https://raw.githubusercontent.com/kildom/wp_downloader/main/README.md',
-    'https://wordpress.org/download/releases/'
+    'https://raw.githubusercontent.com/kildom/wp_downloader/releases/cacert.pem',
+    'https://wordpress.org/download/releases/',
+    'https://curl.se/ca/cacert.pem'
 );
 $cacert_url = 'https://curl.se/ca/cacert.pem';
 $cacert_hash_url = 'https://curl.se/ca/cacert.pem.sha256';
@@ -70,6 +71,11 @@ function update_cacert($input_file, $output_file, &$small_cert)
             exit(1);
         }
         file_put_contents($output_file, $cacert);
+        $downloaded_hash = strtolower(hash_file('sha256', $output_file));
+        if ($downloaded_hash != $new_hash) {
+            echo("Hash of file $cacert_url is different than declared in $cacert_hash_url\n");
+            exit(1);
+        }
     } else {
         copy($input_file, $output_file);
     }
@@ -78,11 +84,15 @@ function update_cacert($input_file, $output_file, &$small_cert)
     foreach ($cert_test_urls as $url) {
         $l = get_certs($url, $output_file);
         if (!$l) {
-            echo("Cannot download $url");
+            echo("Cannot download $url\n");
             exit(1);
+        }
+        foreach ($l as &$c) {
+            $c['-url'] = $url;
         }
         $list = array_merge($list, $l);
     }
+    echo("Host certificates and their chain:\n");
     $certs = array();
     foreach ($list as $c) {
         $x = openssl_x509_parse($c['Cert']);
@@ -90,6 +100,7 @@ function update_cacert($input_file, $output_file, &$small_cert)
         if (isset($x['extensions']['subjectKeyIdentifier'])) {
             $key = parse_key_identifier($x['extensions']['subjectKeyIdentifier'], false);
             $certs[$key] = $x;
+            echo("    $key -> " . $c['-url'] . "\n");
         }
     }
 
@@ -106,13 +117,28 @@ function update_cacert($input_file, $output_file, &$small_cert)
     }
 
     $extracted = array();
+    echo("Certificates extracting:\n");
     foreach ($certs as $key => $cert) {
+        echo("    $key\n");
+        $added = false;
         $auth_key = parse_key_identifier($cert['extensions']['authorityKeyIdentifier'], true);
         if (isset($cacerts[$auth_key])) {
+            echo("        Extracting parent $auth_key\n");
             $extracted[$auth_key] = $cacerts[$auth_key];
-        } else if (!isset($certs[$auth_key])) {
-            echo("Cannot find parent certificate $auth_key of certificate $key");
-            exit(1);
+            $added = true;
+        }
+        if (isset($cacerts[$key])) {
+            echo("        Extracting it\n");
+            $extracted[$key] = $cacerts[$key];
+            $added = true;
+        }
+        if (!$added) {
+            if (isset($certs[$auth_key])) {
+                echo("        Nothing extracted, but parent $auth_key is in the chain\n");
+            } else {
+                echo("        Cannot verify certificate $key with parent $auth_key\n");
+                exit(1);
+            }
         }
     }
 

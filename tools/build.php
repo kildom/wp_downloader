@@ -69,4 +69,4 @@ common_new_lines($cnt);
 common_new_lines($tst);
 
 file_put_contents(__DIR__ . "/../$downloader_file_name", $cnt);
-file_put_contents(__DIR__ . "/../test_$downloader_file_name", $cnt);
+file_put_contents(__DIR__ . "/../test_$downloader_file_name", $tst);

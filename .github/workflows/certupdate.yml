@@ -1,0 +1,33 @@
+name: Update cacert
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: Checkout previous release
+        uses: actions/checkout@v2
+        with:
+          ref: releases
+          path: prev_release
+          fetch-depth: 0
+      - name: Update cacert
+        env:
+          BUILD_PRIVATE_KEY: ${{ secrets.BUILD_PRIVATE_KEY }}
+        run: |
+          php tools/updatecert.php
+      - name: Commit to releases repo
+        run: |
+          cp release/* prev_release/
+          ls -la prev_release/
+          ls -la release/
+          cd prev_release
+          git add
+          git status
+          git commit -m "Update cacert"
+          git push
