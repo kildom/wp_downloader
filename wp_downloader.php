@@ -9,11 +9,8 @@ function get_url($url, $secure = true, $prepare_only = false) {
         curl_setopt($ch, CURLOPT_USERAGENT, "WordPress Downloader PHP script");
     }
     if ($secure) {
-        if (gettype($secure) != 'string') {
-            $secure = __DIR__ . "/_wp_dwnl_cacert.pem";
-        }
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
-        if (file_exists($secure)) {
+        if (gettype($secure) == 'string') {
             echo("    cainfo $secure\n");
             curl_setopt($ch, CURLOPT_CAINFO, $secure);
         } else {
@@ -46,19 +43,73 @@ function get_url($url, $secure = true, $prepare_only = false) {
     return $res;
 }
 
-function cacert_exists()
-{
-    return file_exists(__DIR__ . "/_wp_dwnl_cacert.pem");
+function cacert_file_level($level, $check = true) {
+    $file = __DIR__ . "/_wp_dwnl_cacert.$level.pem";
+    if (file_exists($file) || !$check) {
+        return $file;
+    }
+    return false;
+}
+
+function get_url_secure($url, $prepare_only = false) {
+    global $cacert_url, $github_cacert_url;
+    $expect_level = -1;
+    while (true) {
+        if (cacert_file_level(3) || $expect_level == 3) {
+            return get_url($url, cacert_file_level(3), $prepare_only);
+        } else if (cacert_file_level(2) || $expect_level == 2) {
+            $res = get_url($url, cacert_file_level(2), $prepare_only);
+            if ($res !== false) {
+                return $res;
+            }
+            $cacert = get_url($cacert_url, cacert_file_level(2));
+            if ($cacert === false) {
+                return false;
+            }
+            file_put_contents(cacert_file_level(3, false), $cacert);
+            unlink(cacert_file_level(2, false));
+            $expect_level = 3;
+            continue;
+        } else if (cacert_file_level(1) || $expect_level == 1) {
+            $res = get_url($url, cacert_file_level(1), $prepare_only);
+            if ($res !== false) {
+                return $res;
+            }
+            $cacert = get_url($github_cacert_url, cacert_file_level(1));
+            if ($cacert === false) {
+                $cacert = get_url($cacert_url, cacert_file_level(1));
+                if ($cacert === false) {
+                    return false;
+                }
+            }
+            file_put_contents(cacert_file_level(2, false), $cacert);
+            unlink(cacert_file_level(1, false));
+            $expect_level = 2;
+            continue;
+        } else if (cacert_file_level(0)) {
+            $res = get_url($url, true, $prepare_only);
+            if ($res !== false) {
+                return $res;
+            }
+            rename(cacert_file_level(0, false), cacert_file_level(1, false));
+            $expect_level = 1;
+            continue;
+        } else {
+            return get_url($url, true, $prepare_only);
+        }
+    }
 }
 
 ?>
 <?php
 
-$version = 'v0.0.6';
+$version = 'v0.0.7';
 $cacert_url = 'https://curl.se/ca/cacert.pem';
+$github_cacert_url = 'https://raw.githubusercontent.com/kildom/wp_downloader/releases/cacert.pem';
 $update_url = 'https://raw.githubusercontent.com/kildom/wp_downloader/releases';
 $public_key = "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEIk7ZCuaV8jp+A5MxdivJM+LCqXiv\nKVQJijYssSjx5L5cvLofKa74tpdY4UF4Dfcb/8Bu6ZUN39KIj4YNHVb1KA==\n-----END PUBLIC KEY-----\n";
 $backup_public_key = "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEuc9S0sE8ANEFnsOCOlUZRI1jV/C1\nvUzJkwieSBzv3I4X6aHbl6YaBXwXtDeZLFW+dEMdu2HikrxOQYi6SSAqaQ==\n-----END PUBLIC KEY-----\n";
+$valid_period = 60 * 60 * 24 * 60;
 
 function is_valid_url($url) {
     $res = preg_match_all('/^https:\/\/([a-z_0-9-.]+\.)?wordpress\.org\/.*$/', $url);
@@ -69,8 +120,8 @@ function is_valid_url($url) {
 }
 
 function decode_and_verify($file) {
-    global $public_key, $backup_public_key;
-    $file = str_replace("\n", "\r\n", str_replace("\r", "\n", str_replace("\r\n", "\n", $file)));
+    global $public_key, $backup_public_key, $valid_period;
+    $file = trim(str_replace("\n", "\r\n", str_replace("\r", "\n", str_replace("\r\n", "\n", $file))));
     $info = json_decode($file, false);
     $sig64 = $info->signature;
     $signature = base64_decode(strtr($sig64, '-_', '+/'));
@@ -85,6 +136,10 @@ function decode_and_verify($file) {
         echo("\nInvalid signature\nError");
         return false;
     }
+    if (time() - $info->timestamp > $valid_period) {
+        echo("\nRelease JSON too old\nError");
+        return false;
+    }
     return $info;
 }
 
@@ -92,7 +147,7 @@ function FUNC_auto_update() {
     global $version, $update_url;
     header('Content-type: text/plain');
     $update = isset($_REQUEST['update']) ? intval($_REQUEST['update']) : 0;
-    $file = get_url("$update_url/info.json", true);
+    $file = get_url_secure("$update_url/info.json");
     if (!$file) {
         echo("Reading release info failed. Trying connection without peer verification...\n");
         $file = get_url("$update_url/info.json", false);
@@ -100,9 +155,9 @@ function FUNC_auto_update() {
         if (!$info) {
             return;
         }
-        echo("Applying temporary cainfo for github only...\n");
-        file_put_contents(__DIR__ . '/_wp_dwnl_cacert.pem', $info->small_cert);
-        $file = get_url("$update_url/info.json", true);
+        echo("Applying temporary cainfo...\n");
+        file_put_contents(cacert_file_level(0, false), $info->small_cert);
+        $file = get_url_secure("$update_url/info.json");
     }
     if (!$file) {
         echo("\nCannot download release information file\nError");
@@ -113,7 +168,7 @@ function FUNC_auto_update() {
     if (!$info) {
         return;
     }
-    file_put_contents(__DIR__ . '/_wp_dwnl_cacert.pem', $info->small_cert);
+    file_put_contents(cacert_file_level(0, false), $info->small_cert);
     if (strnatcasecmp($version, $info->version) >= 0) {
         echo("current: $version\n");
         echo("new: $info->version\n");
@@ -129,7 +184,7 @@ function FUNC_auto_update() {
         return;
     }
 
-    $update_file = get_url("$update_url/$info->name", true);
+    $update_file = get_url_secure("$update_url/$info->name");
     if (!$update_file) {
         echo("\nCannot download update file\nError");
         return;
@@ -146,20 +201,6 @@ function FUNC_auto_update() {
     echo("\nOK");
 }
 
-function FUNC_cacert_fix() {
-    global $cacert_url, $update_url;
-    header('Content-type: text/plain');
-    $level = intval($_REQUEST['level']);
-    $url = $level == 1 ? "$update_url/cacert.pem" : $cacert_url;
-    $cacert = get_url($url, true);
-    if (!$cacert) {
-        echo("\nCannot download cacert from $url\nError");
-        return;
-    }
-    file_put_contents("_wp_dwnl_cacert.pem", $cacert);
-    echo("\nOK");
-}
-
 function FUNC_download_page() {
     header('Content-type: text/plain');
     $url = stripslashes($_REQUEST['url']);
@@ -167,7 +208,7 @@ function FUNC_download_page() {
         echo("\nInvalid URL\nError");
         return;
     }
-    $cnt = get_url($url, true);
+    $cnt = get_url_secure($url);
     if ($cnt === false) {
         echo("\nCannot download $url\nError");
     } else {
@@ -190,7 +231,7 @@ function FUNC_download_release() {
     header('Content-type: text/plain');
     $url = stripslashes($_REQUEST['url']);
     if (!is_valid_url($url)) return;
-    $ch = get_url($url, true, true);
+    $ch = get_url_secure($url, true);
     $fp = fopen('_wp_dwnl_rel.zip', 'wb');
     curl_setopt($ch, CURLOPT_FILE, $fp);
     curl_setopt($ch, CURLOPT_PROGRESSFUNCTION, 'progress');
@@ -233,12 +274,12 @@ function FUNC_unpack() {
     if (isset($_REQUEST['chmod_php'])) {
         $chmod_php = intval($_REQUEST['chmod_php'], 0);
     } else {
-        $chmod_php = 0644;
+        $chmod_php = -1;
     }
     if (isset($_REQUEST['chmod_others'])) {
         $chmod_others = intval($_REQUEST['chmod_others'], 0);
     } else {
-        $chmod_others = 0644;
+        $chmod_others = -1;
     }
     if (isset($_REQUEST['dir'])) {
         $dir = preg_replace('/[^a-z0-9_.,=+-]/i', '_', $_REQUEST['dir']);
@@ -301,9 +342,13 @@ function FUNC_unpack() {
                 break;
             }
             if (substr($name, -4) == '.php') {
-                chmod($path, $chmod_php);
+                if ($chmod_php >= 0) {
+                    chmod($path, $chmod_php);
+                }
             } else {
-                chmod($path, $chmod_others);
+                if ($chmod_others >= 0) {
+                    chmod($path, $chmod_others);
+                }
             }
         }
     }
@@ -313,13 +358,17 @@ function FUNC_unpack() {
 function FUNC_cleanup() {
     header('Content-type: text/plain');
     $keep_downloader = isset($_REQUEST['keep_downloader']) ? intval($_REQUEST['keep_downloader']) : 0;
-    if (!$keep_downloader) {
-        @unlink('wp_downloader.php');
+    if (!devel_mode()) {
+        if (!$keep_downloader) {
+            @unlink(__FILE__);
+        }
+        @unlink(cacert_file_level(0, false));
+        @unlink(cacert_file_level(1, false));
+        @unlink(cacert_file_level(2, false));
+        @unlink(cacert_file_level(3, false));
+        @unlink(cacert_file_level(4, false));
     }
     @unlink('_wp_dwnl_rel.zip');
-    if (!devel_mode()) {
-        @unlink('_wp_dwnl_cacert.pem');
-    }
     echo("\nOK");
 }
 
@@ -458,6 +507,9 @@ let releases_url = 'https://wordpress.org/download/releases/';
 let zips;
 let selected_zip;
 let subfolder = '';
+let chmod = false;
+let chmodPHP = 0755;
+let chmodOther = 0644;
 
 function getFolder(href) {
     let url = new URL(href);
@@ -485,6 +537,7 @@ function show_options() {
         url += `${subfolder}/`;
     }
     document.querySelector('#destination').innerText = url;
+    document.querySelector('#adv-options').innerText = chmod ? `chmod ${numToChmod(chmodOther)} *.*; chmod ${numToChmod(chmodPHP)} *.php` : 'None'
     switchScreen('options');
 }
 
@@ -546,20 +599,9 @@ async function do_update(with_download) {
 async function load_releases() {
     switchScreen('progress');
     let releases_page;
-    for (let i = 1; i <= 3; i++) {
-        try {
-            logText(`Loading releases from: ${releases_url}...`);
-            releases_page = await download('download_page', { url: releases_url });
-            logAppend(' OK');
-            break;
-        } catch (ex) {
-            logAppend(' ERROR');
-            if (i == 3) throw ex;
-            logText(`Applying SSL cacert workaround level ${i}...`);
-            await download('cacert_fix', { level: i });
-            logAppend(' OK');
-        }
-    }
+    logText(`Loading releases from: ${releases_url}...`);
+    releases_page = await download('download_page', { url: releases_url });
+    logAppend(' OK');
     zips = [];
     for (let match of releases_page.matchAll(/href="([^"]+-([0-9\.]+\.[0-9\.]+[^"]*).zip)"/gi)) {
         zips.push({
@@ -611,7 +653,12 @@ async function install() {
     logAppend(' OK');
 
     logText(`Unpacking the ZIP file...`);
-    await download('unpack', { dir: subfolder }, (done, total) => {
+    let unpackOptions = { dir: subfolder };
+    if (chmod) {
+        unpackOptions.chmod_php = numToChmod(chmodPHP);
+        unpackOptions.chmod_others = numToChmod(chmodOther);
+    }
+    await download('unpack', unpackOptions, (done, total) => {
         if (done > 0 && total >= done) {
             logProgress(done / total);
         }
@@ -690,6 +737,56 @@ async function setFolder() {
     document.querySelector('#folder').value = subfolder;
     popup.style.display = 'block';
     document.querySelector('#folder').focus();
+}
+
+function numToChmod(num)
+{
+    let ret = '0000' + parseInt(num).toString(8);
+    return ret.substring(ret.length - 4);
+}
+
+function updateChmod() {
+    document.querySelector('#chmod_values').style.display = document.querySelector('#chmod').checked ? 'block' : 'none';
+}
+
+async function setChmod() {
+    let popup = document.querySelector('#popup-chmod');
+    document.querySelector('#chmod_php').value = numToChmod(chmodPHP);
+    document.querySelector('#chmod_other').value = numToChmod(chmodOther);
+    document.querySelector('#chmod').checked = chmod;
+    document.querySelector('#chmod_values').style.display = document.querySelector('#chmod').checked ? 'block' : 'none';
+    popup.style.display = 'block';
+    document.querySelector('#chmod').focus();
+}
+
+function fixChmod(input, event) {
+    let v = input.value
+        .trim()
+        .replace(/[^0-7]/ig, '');
+    if (!v.startsWith('0')) {
+        v = '0' + v;
+    }
+    if (v.length > 4) {
+        v = v.substring(0, 4);
+    }
+    if (input.value != v) {
+        let start = input.selectionStart;
+        let end = input.selectionEnd;
+        input.value = v;
+        input.setSelectionRange(start, end);
+    }
+    if (event && event.keyCode == 13) {
+        chmodSelected();
+    }
+}
+
+async function chmodSelected() {
+    let popup = document.querySelector('#popup-chmod');
+    chmodPHP = parseInt(document.querySelector('#chmod_php').value, 8);
+    chmodOther = parseInt(document.querySelector('#chmod_other').value, 8);
+    chmod = !!document.querySelector('#chmod').checked;
+    popup.style.display = 'none';
+    show_options();
 }
 
 async function folderSelected() {
@@ -915,7 +1012,7 @@ input.text-input {
         </tr>
         <tr>
             <td><br><a class="button-small" onclick="wrap(setFolder)" href="javascript:// Set Subfolder">Set Subfolder</a></td>
-            <td><br><a class="button-small" href="javascript:// Advanced Options">Advanced Options</a></td>
+            <td><br><a class="button-small" onclick="wrap(setChmod)" href="javascript:// Advanced Options">Advanced Options</a></td>
         </tr>
     </table>
 </div>
@@ -971,6 +1068,30 @@ input.text-input {
     <br><br>
     <div style="text-align: center">
     <a onclick="wrap(folderSelected)" class="button-small" href="javascript:// OK">OK</a>
+    </div>
+</div>
+</div>
+
+<div id="popup-chmod" class="popup"><br><br>
+<div>
+    <h1>Advanced options</h1>
+    <input type="checkbox" id="chmod" onchange="updateChmod()">
+    <label for="chmod">Change file permissions (chmod) after unpacking WordPress.</label>
+    <table id="chmod_values">
+        <tr><td>
+            <input type="text" style="width: 80px" value="0755" class="text-input" id="chmod_php" onkeydown="fixChmod(this)" onkeyup="fixChmod(this)" onkeypress="fixChmod(this, event)"></input>
+        </td><td>
+            PHP files linux permissions
+        </td></tr>
+        <tr><td>
+            <input type="text" style="width: 80px" value="0644" class="text-input" id="chmod_other" onkeydown="fixChmod(this)" onkeyup="fixChmod(this)" onkeypress="fixChmod(this, event)"></input>
+        </td><td>
+            Other files linux permissions
+        </td></tr>
+    </table>
+    <br><br>
+    <div style="text-align: center">
+    <a onclick="wrap(chmodSelected)" class="button-small" href="javascript:// OK">OK</a>
     </div>
 </div>
 </div>
