@@ -2,11 +2,11 @@
 
 This script simplifies download and installation of the WordPress.
 
-You have to place a single `wp_downloader.php` file to your server and start the installation with just **one click**.
+You have to place a single [`wp_downloader.php`](https://github.com/kildom/wp_downloader/releases/latest/download/wp_downloader.php) file to your server and start the installation with just **one click**.
 
 ## Download
 
-Go to [releases](https://github.com/kildom/wp_downloader/releases/latest) to download latest `wp_downloader.php` file.
+Just click this link: [`wp_downloader.php`](https://github.com/kildom/wp_downloader/releases/latest/download/wp_downloader.php) 
 
 ## Demo
 
