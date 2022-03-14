@@ -142,3 +142,33 @@ input.text-input {
     margin: 0px;
     width: 100%;
 }
+
+#releases-list a {
+    text-decoration: none;
+    color: #004b69;
+    padding: 1px 3px;
+}
+
+#releases-list a:hover {
+    background-color: #0085ba;
+    color: #FFF;
+}
+
+.version-panel, .major-version-panel {
+    border: 1px solid gray;
+    border-radius: 3px;
+    background-color: #FFF;
+    margin: 3px 0px;
+    padding: 3px 6px;
+}
+
+.minor-version-panel {
+    overflow-y: scroll;
+    overflow-x: auto;
+    height: 200px;
+    border: 1px solid gray;
+    border-radius: 3px;
+    background-color: #FFF;
+    margin: 3px 0px;
+    padding: 3px 6px;
+}

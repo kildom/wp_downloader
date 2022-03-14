@@ -218,17 +218,30 @@ async function load_releases() {
     releases_page = await download('download_page', { url: releases_url });
     logAppend(' OK');
     zips = [];
-    for (let match of releases_page.matchAll(/href="([^"]+-([0-9\.]+\.[0-9\.]+[^"]*).zip)"/gi)) {
+    let added = {};
+    for (let match of releases_page.matchAll(/href="((?:[^"]*\/)?(?:wordpress-)?([^"]*?)(([0-9]+)\.([0-9]+)(?:\.[0-9]+){0,2})([^"]*)\.zip)"/gi)) {
+        // groups: 1 - URL, 2 - version prefix, 3 - version number, 4 - version major, 5 - version minor, 6 - version postfix
+        let url = (new URL(match[1], releases_url)).href;
+        if (url in added) {
+            continue;
+        }
         zips.push({
-            version_num: match[2]
+            versionInt: match[3]
                 .split('.')
                 .map(x => parseInt(x))
                 .concat([0, 0, 0, 0, 0])
                 .slice(0, 4)
                 .reduce((s, x) => s * 1000 + x, 0),
-            version: match[2],
-            url: (new URL(match[1], releases_url)).href,
+            version: match[2] + match[3] + match[6],
+            versionPrefix: match[2],
+            versionNumber: match[3],
+            versionMajor: match[4],
+            versionMinor: match[5],
+            versionPostfix: match[6],
+            url: url,
+            index: zips.length,
         });
+        added[url] = null;
     }
     //zips.sort((a, b) => b.version_num - a.version_num); TODO may be used to find latest beta or RC
     if (zips.length == 0) throw Error('Cannot parse releases page!');
@@ -354,6 +367,70 @@ async function setFolder() {
     document.querySelector('#folder').focus();
 }
 
+async function setRelease() {
+    let popup = document.querySelector('#popup-releases');
+    let html = '';
+    let majorGroups = {};
+    let minorGroups = {};
+    for (let zip of zips) {
+        if (!(zip.versionMajor in majorGroups)) {
+            majorGroups[zip.versionMajor] = {};
+        }
+        if (!(zip.versionMinor in majorGroups[zip.versionMajor])) {
+            majorGroups[zip.versionMajor][zip.versionMinor] = [];
+        }
+        majorGroups[zip.versionMajor][zip.versionMinor].push(zip);
+    }
+    html += `<div id="main-version" class="version-panel">Major version: &nbsp; `;
+    for (let major of Object.keys(majorGroups).sort((a, b) => b - a)) {
+        html += `<a href="javascript:// Set major version ${major}.x" onclick="wrap(setMajorVersion, '${major}')">${major}.x</a> &nbsp; `;
+    }
+    html += `</div>`;
+    let minorHtml = '<div id="minor-version--empty-" class="minor-version-panel"></div>';
+    for (let [major, value] of Object.entries(majorGroups)) {
+        html += `<div id="major-version-${major}" class="major-version-panel">Minor version: &nbsp; `;
+        for (let minor of Object.keys(value).sort((a, b) => b - a)) {
+            html += `<a href="javascript:// Set minor version ${major}.${minor}" onclick="wrap(setMinorVersion, '${major}.${minor}')">${major}.${minor}</a> &nbsp; `;
+            minorHtml += `<div id="minor-version-${major}-${minor}" class="minor-version-panel">`;
+            for (let zip of value[minor]) {
+                minorHtml += `<div class="version-item"><a href="javascript:// Set version ${zip.version}" onclick="wrap(setVersion, ${zip.index})">${zip.version}</a></div>`;
+            }
+            minorHtml += `</div>`;
+        }
+        html += `</div>`;
+    }
+    document.querySelector('#releases-list').innerHTML = html + minorHtml;
+    setMajorVersion(selected_zip.versionMajor);
+    setMinorVersion(`${selected_zip.versionMajor}.${selected_zip.versionMinor}`);
+    popup.style.display = 'block';
+}
+
+async function setMajorVersion(major) {
+    for (let e of document.querySelectorAll('.major-version-panel')) {
+        e.style.display = 'none';
+    }
+    for (let e of document.querySelectorAll('.minor-version-panel')) {
+        e.style.display = 'none';
+    }
+    document.querySelector(`#major-version-${major}`).style.display = '';
+    document.querySelector(`#minor-version--empty-`).style.display = '';
+}
+
+async function setMinorVersion(minor) {
+    for (let e of document.querySelectorAll('.minor-version-panel')) {
+        e.style.display = 'none';
+    }
+    document.querySelector(`#minor-version-${minor.replace('.', '-')}`).style.display = '';
+}
+
+async function setVersion(index) {
+    if (typeof(index) == 'number') {
+        selected_zip = zips[index];
+    }
+    show_options();
+    document.querySelector('#popup-releases').style.display = 'none';
+}
+
 function numToChmod(num)
 {
     let ret = '0000' + parseInt(num).toString(8);
@@ -434,6 +511,9 @@ async function wrap(func, ...args) {
     } catch (ex) {
         console.error(ex);
         document.querySelector('#error-message').innerText = ex.toString();
+        for (let e of document.querySelectorAll('.popup')) {
+            e.style.display = 'none';
+        }
         switchScreen('error');
     }
 }

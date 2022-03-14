@@ -29,9 +29,9 @@
             <td>wordpress.org</td>
         </tr>
         <tr>
-            <td><br><a class="button-small" href="javascript:// Change Version">Change Version</a></td>
-            <td><br><a class="button-small" href="javascript:// Change Language">Change Language</a></td>
-            <td><br><a class="button-small" href="javascript:// Upload custom ZIP file">Install custom ZIP file</a></td>
+            <td><br><a class="button-small" onclick="wrap(setRelease)" href="javascript:// Change Version">Change Version</a></td>
+            <td><br><a class="button-small" onclick="wrap(setLanguage)" href="javascript:// Change Language">Change Language</a></td>
+            <td><br><a class="button-small" onclick="wrap(uploadZip)" href="javascript:// Upload custom ZIP file">Install custom ZIP file</a></td>
         </tr>
     </table><br>
     <table class="details">
@@ -101,6 +101,17 @@
     <br><br>
     <div style="text-align: center">
     <a onclick="wrap(folderSelected)" class="button-small" href="javascript:// OK">OK</a>
+    </div>
+</div>
+</div>
+
+<div id="popup-releases" class="popup"><br><br>
+<div>
+    <h1>Select release</h1>
+    <div id="releases-list"></div>
+    <br>
+    <div style="text-align: center">
+    <a onclick="wrap(setVersion)" class="button-small" href="javascript:// Cancel">Cancel</a>
     </div>
 </div>
 </div>
