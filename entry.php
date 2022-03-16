@@ -12,7 +12,10 @@ $valid_period = 60 * 60 * 24 * 60;
 function is_valid_url($url) {
     $res = preg_match_all('/^https:\/\/([a-z_0-9-.]+\.)?wordpress\.org\/.*$/', $url);
     if (!$res) {
-        echo("URL not allowed: $url");
+        $res = preg_match_all('/^https:\/\/raw.githubusercontent.com\/kildom\/wp_downloader\/.*$/', $url);
+        if (!$res) {
+            echo("URL not allowed: $url");
+        }
     }
     return $res;
 }

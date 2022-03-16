@@ -116,6 +116,17 @@
 </div>
 </div>
 
+<div id="popup-languages" class="popup"><br><br>
+<div>
+    <h1>Select language</h1>
+    <div id="language-list"></div>
+    <br>
+    <div style="text-align: center">
+    <a onclick="wrap(selectLanguage)" class="button-small" href="javascript:// Cancel">Cancel</a>
+    </div>
+</div>
+</div>
+
 <div id="popup-chmod" class="popup"><br><br>
 <div>
     <h1>Advanced options</h1>

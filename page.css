@@ -172,3 +172,38 @@ input.text-input {
     margin: 3px 0px;
     padding: 3px 6px;
 }
+
+#language-list {
+    overflow-y: scroll;
+    overflow-x: auto;
+    height: 270px;
+    border: 1px solid gray;
+    border-radius: 3px;
+    background-color: #FFF;
+    margin: 3px 0px;
+    padding: 3px 6px;
+}
+
+.lang-select, .lang-select-eng, .reg-select, .reg-select-eng {
+    display: inline-block;
+    padding: 4px;
+}
+
+.lang-select { font-size: 80%; color: #888; }
+.lang-select-eng { color: #000; }
+.reg-select { font-size: 60%; color: #888; }
+.reg-select-eng { color: #000; font-size: 80%; margin-left: 15px; }
+
+#language-list a {
+    display: block;
+    background-color: #FFF;
+    border: 1px solid #88F;
+    margin: 4px;
+    border-radius: 4px;
+}
+
+#language-list a:hover {
+    display: block;
+    background-color: rgb(189, 189, 255);
+    border: 1px solid rgb(100, 100, 255);
+}

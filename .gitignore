@@ -3,3 +3,4 @@
 /wp_downloader.php
 /prev_release/
 /release/
+**/node_modules/**

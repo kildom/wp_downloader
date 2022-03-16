@@ -89,12 +89,14 @@ function logText(text) {
     content.innerText = text;
     screen.appendChild(line); // TODO: animation
     screen.scrollBy(0, 100000);
+    console.log('%c' + text, 'color: green');
 }
 
 function logAppend(text) {
     if (lastLogLine == null) logText('');
     let content = lastLogLine.querySelector('div.log-text');
     content.innerText += text;
+    console.log('%c   ... ' + text, 'color: green');
 }
 
 function logProgress(frac) {
@@ -118,13 +120,16 @@ function switchScreen(name) {
 }
 
 let releases_lang = 'English (default)';
+let lang_names_url = 'https://raw.githubusercontent.com/kildom/wp_downloader/releases/codes.json';
 let releases_url = 'https://wordpress.org/download/releases/';
+let releases_default_url = releases_url;
 let zips;
 let selected_zip;
 let subfolder = '';
 let chmod = false;
 let chmodPHP = 0755;
 let chmodOther = 0644;
+let languages = null;
 
 function getFolder(href) {
     let url = new URL(href);
@@ -244,9 +249,41 @@ async function load_releases() {
         added[url] = null;
     }
     //zips.sort((a, b) => b.version_num - a.version_num); TODO may be used to find latest beta or RC
-    if (zips.length == 0) throw Error('Cannot parse releases page!');
+    if (zips.length == 0) {
+        if (releases_url == releases_default_url) {
+            throw Error('Cannot parse releases page!');
+        } else {
+            // TODO: inform that no releases ware found in this language
+            logText('No releases found in this language. Switching to default.');
+            releases_url = releases_default_url;
+            await load_releases();
+            return;
+        }
+    }
     selected_zip = zips[0];
     logText(`Found ${zips.length} releases. Latest is ${selected_zip.version}.`);
+    if (languages === null) {
+        languages = [];
+        let def_url = null;
+        for (let match of releases_page.matchAll(/<link[^>]*\s+rel="alternate"[^>]*\s+href="(.*?)"[^>]*\s+hreflang="(.*?)"/gi)) {
+            let url = (new URL(match[1], releases_url)).href;
+            if (match[2] == 'x-default') {
+                def_url = url;
+                continue;
+            }
+            languages.push({
+                url: url,
+                code: match[2],
+            });
+        }
+        if (def_url) {
+            languages.unshift({
+                url: def_url,
+                code: 'default',
+            });
+        }
+        logText(`Found ${languages.length} languages.`);
+    }
     show_options();
 }
 
@@ -429,6 +466,66 @@ async function setVersion(index) {
     }
     show_options();
     document.querySelector('#popup-releases').style.display = 'none';
+}
+
+let langNames = null;
+
+function genLangLabels(map, id, cssPrefix) {
+    let names = [ id ];
+    if (id in map) {
+        names = map[id];
+        while (typeof(names) == 'string') {
+            names = map[names];
+        }
+    }
+    let html = '';
+    for (let i = 0; i < names.length; i++) {
+        html += `<span class="${cssPrefix}-select${i == 0 ? '-eng' : ''}">${names[i]}</span>`;
+    }
+    return html;
+}
+
+async function setLanguage() {
+    if (langNames == null) {
+        switchScreen('progress');
+        logText(`Downloading language and region names from ${lang_names_url}...`);
+        langNames = JSON.parse(await download('download_page', { url: lang_names_url }));
+        langNames.lang['default'] = [ '(Default)' ];
+        logAppend(' OK');
+        switchScreen('options');
+    }
+    if (!('html' in languages[0])) {
+        for (let i = 0; i < languages.length; i++) {
+            let lang = languages[i];
+            let parts = lang.code.split(/\s*[_\-]\s*/);
+            lang.html = genLangLabels(langNames.lang, parts[0].toLowerCase(), 'lang');
+            lang.html += '<br><span class="reg-select">&nbsp;</span>';
+            if (parts.length > 1) {
+                lang.html += genLangLabels(langNames.reg, parts[1].toUpperCase(), 'reg');
+            }
+        }
+        languages.sort((a, b) => a.html.localeCompare(b.html));
+    }
+    let popup = document.querySelector('#popup-languages');
+    let html = '';
+    for (let i = 0; i < languages.length; i++) {
+        let lang = languages[i];
+        html += `<div><a href="javascript:// Select ${lang.code}" onclick="wrap(selectLanguage, ${i})">${lang.html}</a></div>`;
+    }
+    document.querySelector('#language-list').innerHTML = html;
+    popup.style.display = 'block';
+}
+
+async function selectLanguage(index) {
+    document.querySelector('#popup-languages').style.display = 'none';
+    if (typeof(index) != 'number') {
+        show_options();
+        return;
+    }
+    let lang = languages[index];
+    releases_lang = lang.code;
+    releases_url = lang.url;
+    await load_releases();
 }
 
 function numToChmod(num)
