@@ -182,7 +182,7 @@ function FUNC_unpack() {
     } else {
         $chmod_others = -1;
     }
-    if (isset($_REQUEST['dir'])) {
+    if (isset($_REQUEST['dir']) && strlen(trim($_REQUEST['dir'])) > 0) {
         $dir = preg_replace('/[^a-z0-9_.,=+-]/i', '_', $_REQUEST['dir']);
     } else {
         $dir = '.';
