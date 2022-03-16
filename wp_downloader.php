@@ -103,7 +103,7 @@ function get_url_secure($url, $prepare_only = false) {
 ?>
 <?php
 
-$version = 'v0.0.8';
+$version = 'v0.0.9';
 $cacert_url = 'https://curl.se/ca/cacert.pem';
 $github_cacert_url = 'https://raw.githubusercontent.com/kildom/wp_downloader/releases/cacert.pem';
 $update_url = 'https://raw.githubusercontent.com/kildom/wp_downloader/releases';
@@ -284,7 +284,7 @@ function FUNC_unpack() {
     } else {
         $chmod_others = -1;
     }
-    if (isset($_REQUEST['dir'])) {
+    if (isset($_REQUEST['dir']) && strlen(trim($_REQUEST['dir'])) > 0) {
         $dir = preg_replace('/[^a-z0-9_.,=+-]/i', '_', $_REQUEST['dir']);
     } else {
         $dir = '.';
