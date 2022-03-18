@@ -103,7 +103,7 @@ function get_url_secure($url, $prepare_only = false) {
 ?>
 <?php
 
-$version = 'v0.0.10';
+$version = 'v0.0.11';
 $cacert_url = 'https://curl.se/ca/cacert.pem';
 $github_cacert_url = 'https://raw.githubusercontent.com/kildom/wp_downloader/releases/cacert.pem';
 $update_url = 'https://raw.githubusercontent.com/kildom/wp_downloader/releases';
@@ -1283,7 +1283,9 @@ async function uploadZip() {
 
 async function fileSelected() {
     let files = document.getElementById("browse").files;
-    if (files.length != 1) {
+    if (files.length == 0) {
+        return;
+    } else if (files.length != 1) {
         throw Error('Only one file can be selected.');
     }
     await uploadFile(files[0]);
