@@ -1,6 +1,11 @@
 
 let devel_mode = /*BUILDVAR:devel*/true/**/;
 
+function sleep(ms) {
+    return new Promise(resolve => {
+        setTimeout(resolve, ms);
+    });
+}
 
 function interpret_download(resolve, reject, response) {
     response = response.trimEnd();
@@ -12,6 +17,7 @@ function interpret_download(resolve, reject, response) {
     let result = response.substr(pos + 1);
     response = response.substr(0, pos);
     if (result.trim() == 'Error') {
+        console.log(`Response: ${response}`);
         pos = response.lastIndexOf('\n');
         if (pos < 0) pos = 0;
         let message = response.substr(pos + 1);
@@ -19,6 +25,7 @@ function interpret_download(resolve, reject, response) {
         return;
     }
     if (result.trim() != 'OK') {
+        console.log(`Response: ${response}`);
         reject(Error('Invalid response from server'));
         return;
     }
@@ -37,13 +44,23 @@ function interpret_download(resolve, reject, response) {
     resolve(response);
 }
 
-function download(func, data, progress) {
+function download(func, data, progress, upload) {
     return new Promise((resolve, reject) => {
-        let body = Object.entries(data)
-            .concat([['func', func]])
-            .map(([key, val]) => encodeURIComponent(key) + '=' + encodeURIComponent(val))
-            .join('&');
-        console.log(`Requesting: ${body}`);
+        let body;
+        if (upload) {
+            body = new FormData();
+            body.append('func', func);
+            for (let [key, value] of Object.entries(data)) {
+                body.append(key, value);
+            }
+            console.log(`Requesting: ${new URLSearchParams(body)}`);
+        } else {
+            body = Object.entries(data)
+                .concat([['func', func]])
+                .map(([key, val]) => encodeURIComponent(key) + '=' + encodeURIComponent(val))
+                .join('&');
+            console.log(`Requesting: ${body}`);
+        }
         var xhr = new XMLHttpRequest();
         xhr.onreadystatechange = function () {
             if (this.readyState === XMLHttpRequest.DONE) {
@@ -68,7 +85,9 @@ function download(func, data, progress) {
             }
         }
         xhr.open("POST", '?');
-        xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+        if (!upload) {
+            xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+        }
         xhr.send(body);
     });
 }
@@ -130,6 +149,7 @@ let chmod = false;
 let chmodPHP = 0755;
 let chmodOther = 0644;
 let languages = null;
+let max_upload = 1024 * 1024;
 
 function getFolder(href) {
     let url = new URL(href);
@@ -180,6 +200,7 @@ async function main() {
         current_wpd_version = update_response.current;
         new_wpd_version = update_response['new'];
         update_needed = !!parseInt(update_response.update);
+        max_upload = parseInt(update_response.max_upload);
         logAppend(` OK`);
         logText(`Current version ${current_wpd_version}`);
         logText(`Latest version ${new_wpd_version}`);
@@ -317,6 +338,10 @@ async function install() {
     if (zip_hash != hash) throw Error(`Hashes does not match. Expected: ${hash}, downloaded: ${zip_hash}`);
     logAppend(' OK');
 
+    await unpack();
+}
+
+async function unpack() {
     logText(`Unpacking the ZIP file...`);
     let unpackOptions = { dir: subfolder };
     if (chmod) {
@@ -347,7 +372,10 @@ async function install() {
 
 function startWordPressInstaller() {
     logText(`Redirecting to the installer...`);
-    let path = subfolder + '/';
+    let path = subfolder;
+    if (path.length) {
+        path += '/';
+    }
     if (devel_mode) {
         path = 'temp/' + path;
     }
@@ -461,7 +489,7 @@ async function setMinorVersion(minor) {
 }
 
 async function setVersion(index) {
-    if (typeof(index) == 'number') {
+    if (typeof (index) == 'number') {
         selected_zip = zips[index];
     }
     show_options();
@@ -471,10 +499,10 @@ async function setVersion(index) {
 let langNames = null;
 
 function genLangLabels(map, id, cssPrefix) {
-    let names = [ id ];
+    let names = [id];
     if (id in map) {
         names = map[id];
-        while (typeof(names) == 'string') {
+        while (typeof (names) == 'string') {
             names = map[names];
         }
     }
@@ -490,7 +518,7 @@ async function setLanguage() {
         switchScreen('progress');
         logText(`Downloading language and region names from ${lang_names_url}...`);
         langNames = JSON.parse(await download('download_page', { url: lang_names_url }));
-        langNames.lang['default'] = [ '(Default)' ];
+        langNames.lang['default'] = ['(Default)'];
         logAppend(' OK');
         switchScreen('options');
     }
@@ -518,7 +546,7 @@ async function setLanguage() {
 
 async function selectLanguage(index) {
     document.querySelector('#popup-languages').style.display = 'none';
-    if (typeof(index) != 'number') {
+    if (typeof (index) != 'number') {
         show_options();
         return;
     }
@@ -528,8 +556,7 @@ async function selectLanguage(index) {
     await load_releases();
 }
 
-function numToChmod(num)
-{
+function numToChmod(num) {
     let ret = '0000' + parseInt(num).toString(8);
     return ret.substring(ret.length - 4);
 }
@@ -600,6 +627,194 @@ function fixFolderName(input, event) {
     if (event && event.keyCode == 13) {
         folderSelected();
     }
+}
+
+let dragOverTimeout = null;
+
+function dragOverHandler(ev, element) {
+    ev.preventDefault();
+    element.classList.add('drop');
+    if (dragOverTimeout !== null) {
+        clearTimeout(dragOverTimeout);
+    }
+    dragOverTimeout = setTimeout(() => dragOverEnd(element), 500);
+}
+
+function dragOverEnd(element) {
+    element.classList.remove('drop');
+    dragOverTimeout = null;
+}
+
+async function dropHandler(ev, element) {
+    ev.preventDefault();
+    if (dragOverTimeout !== null) {
+        clearTimeout(dragOverTimeout);
+    }
+    dragOverEnd(element);
+
+    let file;
+    if (ev.dataTransfer.items) {
+        if (ev.dataTransfer.items.length != 1 || ev.dataTransfer.items[0].kind !== 'file') {
+            throw Error('Only one file can be dropped');
+        }
+        file = ev.dataTransfer.items[0].getAsFile();
+    } else {
+        if (ev.dataTransfer.files.length != 1) {
+            throw Error('Only one file can be dropped');
+        }
+        file = ev.dataTransfer.files[0];
+    }
+    await uploadFile(file);
+}
+
+let uploadChunks = [];
+let uploadCrc = null;
+
+const WAITING = 0;
+const RUNNING = 1;
+const DONE = 2;
+
+async function uploadChunk(chunk) {
+    try {
+        if (chunk.crc32 === null) {
+            chunk.crc32 = crc32(new Uint8Array(await chunk.blob.arrayBuffer()));
+        }
+        await download('upload', {
+            file: chunk.blob,
+            start: chunk.start,
+            end: chunk.end,
+            total: chunk.total,
+            crc32: chunk.crc32,
+        }, null, true);
+        chunk.state = DONE;
+        uploadNextChunk();
+    } catch (ex) {
+        if (chunk.retry > 0) {
+            chunk.state = WAITING;
+            chunk.retry--;
+            uploadNextChunk();
+        } else {
+            uploadChunks = [];
+            throw ex;
+        }
+    }
+}
+
+function uploadNextChunk() {
+    let done = 0;
+    for (let chunk of uploadChunks) {
+        if (chunk.state == DONE) done++;
+        if (chunk.state != WAITING) continue;
+        chunk.state = RUNNING;
+        wrap(uploadChunk, chunk);
+        break;
+    }
+    logProgress(done / uploadChunks.length);
+    if (done == uploadChunks.length) {
+        logAppend("OK");
+        wrap(finalizeUpload);
+    }
+}
+
+
+function parseCrc32(crc) {
+    crc = crc.trim();
+    crc = [...crc.matchAll(/[0-9A-F]{8}/gi)];
+    if (!crc || crc.length == 0) throw Error(`Cannot parse CRC-32 response`);
+    return crc[crc.length - 1][0];
+}
+
+async function finalizeUpload() {
+    logText(`Finalizing upload... `);
+    let crc = await download('get_crc32', {});
+    crc = parseCrc32(crc);
+    console.log(`CRC-32 from server: ${crc}`);
+    crc = parseInt(crc, 16) & 0xFFFFFFFF;
+    console.log(`CRC-32 from server: ${crc}`);
+    if (uploadCrc instanceof Promise) {
+        await uploadCrc;
+    }
+    if (uploadCrc != crc) {
+        throw Error(`Upload error. Invalid CRC of uploaded file.`);
+    }
+    logAppend(`OK`);
+    await unpack();
+}
+
+async function calcFileCrc() {
+    await sleep(0);
+    let crc = 0;
+    for (let chunk of uploadChunks) {
+        crc = crc32(new Uint8Array(await chunk.blob.arrayBuffer()), crc);
+        await sleep(0);
+    }
+    uploadCrc = crc;
+    console.log(`CRC-32 calculated: ${crc}`);
+}
+
+async function uploadFile(file) {
+    if (!file.name.toLowerCase().endsWith('.zip')) {
+        throw Error('Only ZIP file is supported!');
+    }
+    switchScreen('progress');
+    logText(`Uploading ${file.name} of size ${file.size} (${Math.round(file.size / 1024 / 1024 * 10) / 10} MB)... `);
+    let chunkCount = Math.max(3, Math.ceil(file.size / 1024 / 1024));
+    let chunkSize = Math.ceil(file.size / chunkCount);
+    if (chunkSize > max_upload - 32768 && max_upload >= 65536) {
+        chunkSize = max_upload - 32768;
+    }
+    let pos = 0;
+    uploadChunks = [];
+    while (pos < file.size) {
+        uploadChunks.push({
+            start: pos,
+            end: Math.min(file.size, pos + chunkSize),
+            blob: file.slice(pos, Math.min(file.size, pos + chunkSize)),
+            retry: 4,
+            state: WAITING,
+            total: file.size,
+            crc32: null,
+        });
+        pos += chunkSize;
+    }
+    uploadCrc = calcFileCrc();
+    uploadNextChunk();
+    uploadNextChunk();
+    uploadNextChunk();
+}
+
+function createCrc32Table() {
+    let crcTable = new Int32Array(256);
+    for (let byte = 0; byte < 256; byte++) {
+        let c = byte;
+        for (let i = 0; i < 8; i++) {
+            c = ((c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1));
+        }
+        crcTable[byte] = c;
+    }
+    return crcTable;
+}
+
+const crcTable = createCrc32Table();
+
+function crc32(data, oldCrc) {
+    let crc = !oldCrc ? -1 : ~oldCrc;
+    for (let i = 0; i < data.length; i++) {
+        crc = (crc >>> 8) ^ crcTable[(crc ^ data[i]) & 0xFF];
+    }
+    return ~crc;
+};
+
+async function uploadZip() {
+    document.getElementById("browse").click();
+}
+
+async function fileSelected() {
+    let files = document.getElementById("browse").files;
+    if (files.length != 1) {
+        throw Error('Only one file can be selected.');
+    }
+    await uploadFile(files[0]);
 }
 
 async function wrap(func, ...args) {

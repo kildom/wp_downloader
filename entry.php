@@ -44,6 +44,25 @@ function decode_and_verify($file) {
     return $info;
 }
 
+function parse_size($value) {
+    $value = trim($value);
+    switch(strtolower($value[strlen($value) - 1])) 
+    {
+        case 'g': $val *= 1024;
+        case 'm': $val *= 1024;
+        case 'k': $val *= 1024;
+        default: $val *= 1;
+    }
+    return $val;
+}
+
+function max_upload() {
+    $max_upload = parse_size(ini_get('upload_max_filesize'));
+    $max_post = parse_size(ini_get('post_max_size'));
+    $memory_limit = parse_size(ini_get('memory_limit'));
+    return min($max_upload, $max_post, $memory_limit);
+}
+
 function FUNC_auto_update() {
     global $version, $update_url;
     header('Content-type: text/plain');
@@ -70,7 +89,9 @@ function FUNC_auto_update() {
         return;
     }
     file_put_contents(cacert_file_level(0, false), $info->small_cert);
+    $max_upload = max_upload();
     if (strnatcasecmp($version, $info->version) >= 0) {
+        echo("max_upload: $max_upload\n");
         echo("current: $version\n");
         echo("new: $info->version\n");
         echo("update: 0\n");
@@ -78,6 +99,7 @@ function FUNC_auto_update() {
         return;
     }
     if (!$update) {
+        echo("max_upload: $max_upload\n");
         echo("current: $version\n");
         echo("new: $info->version\n");
         echo("update: 1\n");
@@ -170,6 +192,20 @@ function FUNC_get_hash() {
     }
 }
 
+function FUNC_get_crc32() {
+    header('Content-type: text/plain');
+    if (!file_exists('_wp_dwnl_rel.zip')) {
+        $crc = '0';
+    } else {
+        $crc = @hash_file('crc32b', '_wp_dwnl_rel.zip', false);
+    }
+    if ($crc === false) {
+        echo("\nCannot read uploaded ZIP file\nError");
+    } else {
+        echo("$crc\nOK");
+    }
+}
+
 function FUNC_unpack() {
     header('Content-type: text/plain');
     if (isset($_REQUEST['chmod_php'])) {
@@ -197,6 +233,12 @@ function FUNC_unpack() {
     for ($i=0; $i < $za->numFiles; $i++) {
         $name = $za->getNameIndex($i);
         if (substr($name, -1) == '/') continue;
+        $pos = strrpos($name, '/');
+        if ($pos === false) {
+            $common_prefix = '';
+            break;
+        }
+        $name = substr($name, 0, $pos + 1);
         if ($common_prefix === false) $common_prefix = $name;
         while (substr($name, 0, strlen($common_prefix)) != $common_prefix) {
             $common_prefix = substr($common_prefix, 0, -1);
@@ -270,6 +312,48 @@ function FUNC_cleanup() {
         @unlink(cacert_file_level(4, false));
     }
     @unlink('_wp_dwnl_rel.zip');
+    echo("\nOK");
+}
+
+function FUNC_upload() {
+    header('Content-type: text/plain');
+    $crc1 = hash_file('crc32b', $_FILES['file']['tmp_name'], false);
+    $crc2 = strrev(substr(strrev(dechex($_POST['crc32'])) . '00000000', 0, 8));
+    if ($crc1 != $crc2) {
+        echo("\nInvalid CRC\nError");
+        return;
+    }
+    $src = fopen($_FILES['file']['tmp_name'], 'rb');
+    $dst = fopen('_wp_dwnl_rel.zip', 'cb+');
+    if (!$src || !$dst) {
+        echo("\nFile IO error\nError");
+        return;
+    }
+    flock($dst, LOCK_EX);
+    fseek($dst, 0, SEEK_END);
+    $file_size = ftell($dst);
+    $expected_size = intval($_POST['total']);
+    if ($file_size != $expected_size) {
+        ftruncate($dst, $expected_size);
+    }
+    $start = intval($_POST['start']);
+    $end = intval($_POST['end']);
+    fseek($dst, $start);
+    $len = $end - $start;
+    while ($len > 0) {
+        $buf = fread($src, min(65536, $len));
+        $n = fwrite($dst, $buf);
+        if ($buf === false || strlen($buf) == 0 || $n != strlen($buf)) {
+            echo("\nFile IO error\nError");
+            flock($dst, LOCK_UN);
+            return;
+        }
+        $len -= $n;
+    }
+    flock($dst, LOCK_UN);
+    fclose($dst);
+    fclose($src);
+    unlink($_FILES['file']['tmp_name']);
     echo("\nOK");
 }
 

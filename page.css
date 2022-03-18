@@ -25,6 +25,10 @@ div.screen {
     display: none;
 }
 
+div.drop {
+    background-color: rgb(32, 218, 171);
+}
+
 div#screen-progress {
     height: 350px;
     max-height: 350px;

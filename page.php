@@ -14,24 +14,26 @@
 
 </div>
 
-<div id="screen-options" class="screen" style="text-align: center;">
+<div id="screen-options" class="screen" style="text-align: center;"  ondrop="wrap(dropHandler, event, this);" ondragover="dragOverHandler(event, this);">
     <a id="install" class="button-big" onclick="wrap(install);" href="javascript:// Download and Install WordPress">Download and Install<br>WordPress</a>
     <br><br>
     <table class="details">
         <tr>
             <td width="33%"><br>Version</td>
             <td width="34%"><br>Language</td>
-            <td width="33%"><br>Download from</td>
+            <td width="33%"><br>Install from a custom ZIP file:</td>
         </tr>
         <tr>
             <td><span id="version"></span></td>
             <td><span id="lang"></span></td>
-            <td>wordpress.org</td>
+            <td>Drop ZIP file here</td>
         </tr>
         <tr>
             <td><br><a class="button-small" onclick="wrap(setRelease)" href="javascript:// Change Version">Change Version</a></td>
             <td><br><a class="button-small" onclick="wrap(setLanguage)" href="javascript:// Change Language">Change Language</a></td>
-            <td><br><a class="button-small" onclick="wrap(uploadZip)" href="javascript:// Upload custom ZIP file">Install custom ZIP file</a></td>
+            <td><br><a class="button-small" onclick="wrap(uploadZip)" href="javascript:// Upload custom ZIP file">Browse</a>
+                <input type="file" id="browse" style="display: none" onChange="wrap(fileSelected)"/>
+            </td>
         </tr>
     </table><br>
     <table class="details">
