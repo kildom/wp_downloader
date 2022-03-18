@@ -103,7 +103,7 @@ function get_url_secure($url, $prepare_only = false) {
 ?>
 <?php
 
-$version = 'v0.0.9';
+$version = 'v0.0.10';
 $cacert_url = 'https://curl.se/ca/cacert.pem';
 $github_cacert_url = 'https://raw.githubusercontent.com/kildom/wp_downloader/releases/cacert.pem';
 $update_url = 'https://raw.githubusercontent.com/kildom/wp_downloader/releases';
@@ -146,6 +146,25 @@ function decode_and_verify($file) {
     return $info;
 }
 
+function parse_size($value) {
+    $value = trim($value);
+    switch(strtolower($value[strlen($value) - 1])) 
+    {
+        case 'g': $val *= 1024;
+        case 'm': $val *= 1024;
+        case 'k': $val *= 1024;
+        default: $val *= 1;
+    }
+    return $val;
+}
+
+function max_upload() {
+    $max_upload = parse_size(ini_get('upload_max_filesize'));
+    $max_post = parse_size(ini_get('post_max_size'));
+    $memory_limit = parse_size(ini_get('memory_limit'));
+    return min($max_upload, $max_post, $memory_limit);
+}
+
 function FUNC_auto_update() {
     global $version, $update_url;
     header('Content-type: text/plain');
@@ -172,7 +191,9 @@ function FUNC_auto_update() {
         return;
     }
     file_put_contents(cacert_file_level(0, false), $info->small_cert);
+    $max_upload = max_upload();
     if (strnatcasecmp($version, $info->version) >= 0) {
+        echo("max_upload: $max_upload\n");
         echo("current: $version\n");
         echo("new: $info->version\n");
         echo("update: 0\n");
@@ -180,6 +201,7 @@ function FUNC_auto_update() {
         return;
     }
     if (!$update) {
+        echo("max_upload: $max_upload\n");
         echo("current: $version\n");
         echo("new: $info->version\n");
         echo("update: 1\n");
@@ -272,6 +294,20 @@ function FUNC_get_hash() {
     }
 }
 
+function FUNC_get_crc32() {
+    header('Content-type: text/plain');
+    if (!file_exists('_wp_dwnl_rel.zip')) {
+        $crc = '0';
+    } else {
+        $crc = @hash_file('crc32b', '_wp_dwnl_rel.zip', false);
+    }
+    if ($crc === false) {
+        echo("\nCannot read uploaded ZIP file\nError");
+    } else {
+        echo("$crc\nOK");
+    }
+}
+
 function FUNC_unpack() {
     header('Content-type: text/plain');
     if (isset($_REQUEST['chmod_php'])) {
@@ -299,6 +335,12 @@ function FUNC_unpack() {
     for ($i=0; $i < $za->numFiles; $i++) {
         $name = $za->getNameIndex($i);
         if (substr($name, -1) == '/') continue;
+        $pos = strrpos($name, '/');
+        if ($pos === false) {
+            $common_prefix = '';
+            break;
+        }
+        $name = substr($name, 0, $pos + 1);
         if ($common_prefix === false) $common_prefix = $name;
         while (substr($name, 0, strlen($common_prefix)) != $common_prefix) {
             $common_prefix = substr($common_prefix, 0, -1);
@@ -375,6 +417,48 @@ function FUNC_cleanup() {
     echo("\nOK");
 }
 
+function FUNC_upload() {
+    header('Content-type: text/plain');
+    $crc1 = hash_file('crc32b', $_FILES['file']['tmp_name'], false);
+    $crc2 = strrev(substr(strrev(dechex($_POST['crc32'])) . '00000000', 0, 8));
+    if ($crc1 != $crc2) {
+        echo("\nInvalid CRC\nError");
+        return;
+    }
+    $src = fopen($_FILES['file']['tmp_name'], 'rb');
+    $dst = fopen('_wp_dwnl_rel.zip', 'cb+');
+    if (!$src || !$dst) {
+        echo("\nFile IO error\nError");
+        return;
+    }
+    flock($dst, LOCK_EX);
+    fseek($dst, 0, SEEK_END);
+    $file_size = ftell($dst);
+    $expected_size = intval($_POST['total']);
+    if ($file_size != $expected_size) {
+        ftruncate($dst, $expected_size);
+    }
+    $start = intval($_POST['start']);
+    $end = intval($_POST['end']);
+    fseek($dst, $start);
+    $len = $end - $start;
+    while ($len > 0) {
+        $buf = fread($src, min(65536, $len));
+        $n = fwrite($dst, $buf);
+        if ($buf === false || strlen($buf) == 0 || $n != strlen($buf)) {
+            echo("\nFile IO error\nError");
+            flock($dst, LOCK_UN);
+            return;
+        }
+        $len -= $n;
+    }
+    flock($dst, LOCK_UN);
+    fclose($dst);
+    fclose($src);
+    unlink($_FILES['file']['tmp_name']);
+    echo("\nOK");
+}
+
 function FUNC_test_result() {
     header('Content-type: text/plain');
     if (!do_test()) return;
@@ -389,6 +473,11 @@ function show_page() {
 
 let devel_mode = false;
 
+function sleep(ms) {
+    return new Promise(resolve => {
+        setTimeout(resolve, ms);
+    });
+}
 
 function interpret_download(resolve, reject, response) {
     response = response.trimEnd();
@@ -400,6 +489,7 @@ function interpret_download(resolve, reject, response) {
     let result = response.substr(pos + 1);
     response = response.substr(0, pos);
     if (result.trim() == 'Error') {
+        console.log(`Response: ${response}`);
         pos = response.lastIndexOf('\n');
         if (pos < 0) pos = 0;
         let message = response.substr(pos + 1);
@@ -407,6 +497,7 @@ function interpret_download(resolve, reject, response) {
         return;
     }
     if (result.trim() != 'OK') {
+        console.log(`Response: ${response}`);
         reject(Error('Invalid response from server'));
         return;
     }
@@ -425,13 +516,23 @@ function interpret_download(resolve, reject, response) {
     resolve(response);
 }
 
-function download(func, data, progress) {
+function download(func, data, progress, upload) {
     return new Promise((resolve, reject) => {
-        let body = Object.entries(data)
-            .concat([['func', func]])
-            .map(([key, val]) => encodeURIComponent(key) + '=' + encodeURIComponent(val))
-            .join('&');
-        console.log(`Requesting: ${body}`);
+        let body;
+        if (upload) {
+            body = new FormData();
+            body.append('func', func);
+            for (let [key, value] of Object.entries(data)) {
+                body.append(key, value);
+            }
+            console.log(`Requesting: ${new URLSearchParams(body)}`);
+        } else {
+            body = Object.entries(data)
+                .concat([['func', func]])
+                .map(([key, val]) => encodeURIComponent(key) + '=' + encodeURIComponent(val))
+                .join('&');
+            console.log(`Requesting: ${body}`);
+        }
         var xhr = new XMLHttpRequest();
         xhr.onreadystatechange = function () {
             if (this.readyState === XMLHttpRequest.DONE) {
@@ -456,7 +557,9 @@ function download(func, data, progress) {
             }
         }
         xhr.open("POST", '?');
-        xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+        if (!upload) {
+            xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+        }
         xhr.send(body);
     });
 }
@@ -518,6 +621,7 @@ let chmod = false;
 let chmodPHP = 0755;
 let chmodOther = 0644;
 let languages = null;
+let max_upload = 1024 * 1024;
 
 function getFolder(href) {
     let url = new URL(href);
@@ -568,6 +672,7 @@ async function main() {
         current_wpd_version = update_response.current;
         new_wpd_version = update_response['new'];
         update_needed = !!parseInt(update_response.update);
+        max_upload = parseInt(update_response.max_upload);
         logAppend(` OK`);
         logText(`Current version ${current_wpd_version}`);
         logText(`Latest version ${new_wpd_version}`);
@@ -705,6 +810,10 @@ async function install() {
     if (zip_hash != hash) throw Error(`Hashes does not match. Expected: ${hash}, downloaded: ${zip_hash}`);
     logAppend(' OK');
 
+    await unpack();
+}
+
+async function unpack() {
     logText(`Unpacking the ZIP file...`);
     let unpackOptions = { dir: subfolder };
     if (chmod) {
@@ -735,7 +844,10 @@ async function install() {
 
 function startWordPressInstaller() {
     logText(`Redirecting to the installer...`);
-    let path = subfolder + '/';
+    let path = subfolder;
+    if (path.length) {
+        path += '/';
+    }
     if (devel_mode) {
         path = 'temp/' + path;
     }
@@ -849,7 +961,7 @@ async function setMinorVersion(minor) {
 }
 
 async function setVersion(index) {
-    if (typeof(index) == 'number') {
+    if (typeof (index) == 'number') {
         selected_zip = zips[index];
     }
     show_options();
@@ -859,10 +971,10 @@ async function setVersion(index) {
 let langNames = null;
 
 function genLangLabels(map, id, cssPrefix) {
-    let names = [ id ];
+    let names = [id];
     if (id in map) {
         names = map[id];
-        while (typeof(names) == 'string') {
+        while (typeof (names) == 'string') {
             names = map[names];
         }
     }
@@ -878,7 +990,7 @@ async function setLanguage() {
         switchScreen('progress');
         logText(`Downloading language and region names from ${lang_names_url}...`);
         langNames = JSON.parse(await download('download_page', { url: lang_names_url }));
-        langNames.lang['default'] = [ '(Default)' ];
+        langNames.lang['default'] = ['(Default)'];
         logAppend(' OK');
         switchScreen('options');
     }
@@ -906,7 +1018,7 @@ async function setLanguage() {
 
 async function selectLanguage(index) {
     document.querySelector('#popup-languages').style.display = 'none';
-    if (typeof(index) != 'number') {
+    if (typeof (index) != 'number') {
         show_options();
         return;
     }
@@ -916,8 +1028,7 @@ async function selectLanguage(index) {
     await load_releases();
 }
 
-function numToChmod(num)
-{
+function numToChmod(num) {
     let ret = '0000' + parseInt(num).toString(8);
     return ret.substring(ret.length - 4);
 }
@@ -990,6 +1101,194 @@ function fixFolderName(input, event) {
     }
 }
 
+let dragOverTimeout = null;
+
+function dragOverHandler(ev, element) {
+    ev.preventDefault();
+    element.classList.add('drop');
+    if (dragOverTimeout !== null) {
+        clearTimeout(dragOverTimeout);
+    }
+    dragOverTimeout = setTimeout(() => dragOverEnd(element), 500);
+}
+
+function dragOverEnd(element) {
+    element.classList.remove('drop');
+    dragOverTimeout = null;
+}
+
+async function dropHandler(ev, element) {
+    ev.preventDefault();
+    if (dragOverTimeout !== null) {
+        clearTimeout(dragOverTimeout);
+    }
+    dragOverEnd(element);
+
+    let file;
+    if (ev.dataTransfer.items) {
+        if (ev.dataTransfer.items.length != 1 || ev.dataTransfer.items[0].kind !== 'file') {
+            throw Error('Only one file can be dropped');
+        }
+        file = ev.dataTransfer.items[0].getAsFile();
+    } else {
+        if (ev.dataTransfer.files.length != 1) {
+            throw Error('Only one file can be dropped');
+        }
+        file = ev.dataTransfer.files[0];
+    }
+    await uploadFile(file);
+}
+
+let uploadChunks = [];
+let uploadCrc = null;
+
+const WAITING = 0;
+const RUNNING = 1;
+const DONE = 2;
+
+async function uploadChunk(chunk) {
+    try {
+        if (chunk.crc32 === null) {
+            chunk.crc32 = crc32(new Uint8Array(await chunk.blob.arrayBuffer()));
+        }
+        await download('upload', {
+            file: chunk.blob,
+            start: chunk.start,
+            end: chunk.end,
+            total: chunk.total,
+            crc32: chunk.crc32,
+        }, null, true);
+        chunk.state = DONE;
+        uploadNextChunk();
+    } catch (ex) {
+        if (chunk.retry > 0) {
+            chunk.state = WAITING;
+            chunk.retry--;
+            uploadNextChunk();
+        } else {
+            uploadChunks = [];
+            throw ex;
+        }
+    }
+}
+
+function uploadNextChunk() {
+    let done = 0;
+    for (let chunk of uploadChunks) {
+        if (chunk.state == DONE) done++;
+        if (chunk.state != WAITING) continue;
+        chunk.state = RUNNING;
+        wrap(uploadChunk, chunk);
+        break;
+    }
+    logProgress(done / uploadChunks.length);
+    if (done == uploadChunks.length) {
+        logAppend("OK");
+        wrap(finalizeUpload);
+    }
+}
+
+
+function parseCrc32(crc) {
+    crc = crc.trim();
+    crc = [...crc.matchAll(/[0-9A-F]{8}/gi)];
+    if (!crc || crc.length == 0) throw Error(`Cannot parse CRC-32 response`);
+    return crc[crc.length - 1][0];
+}
+
+async function finalizeUpload() {
+    logText(`Finalizing upload... `);
+    let crc = await download('get_crc32', {});
+    crc = parseCrc32(crc);
+    console.log(`CRC-32 from server: ${crc}`);
+    crc = parseInt(crc, 16) & 0xFFFFFFFF;
+    console.log(`CRC-32 from server: ${crc}`);
+    if (uploadCrc instanceof Promise) {
+        await uploadCrc;
+    }
+    if (uploadCrc != crc) {
+        throw Error(`Upload error. Invalid CRC of uploaded file.`);
+    }
+    logAppend(`OK`);
+    await unpack();
+}
+
+async function calcFileCrc() {
+    await sleep(0);
+    let crc = 0;
+    for (let chunk of uploadChunks) {
+        crc = crc32(new Uint8Array(await chunk.blob.arrayBuffer()), crc);
+        await sleep(0);
+    }
+    uploadCrc = crc;
+    console.log(`CRC-32 calculated: ${crc}`);
+}
+
+async function uploadFile(file) {
+    if (!file.name.toLowerCase().endsWith('.zip')) {
+        throw Error('Only ZIP file is supported!');
+    }
+    switchScreen('progress');
+    logText(`Uploading ${file.name} of size ${file.size} (${Math.round(file.size / 1024 / 1024 * 10) / 10} MB)... `);
+    let chunkCount = Math.max(3, Math.ceil(file.size / 1024 / 1024));
+    let chunkSize = Math.ceil(file.size / chunkCount);
+    if (chunkSize > max_upload - 32768 && max_upload >= 65536) {
+        chunkSize = max_upload - 32768;
+    }
+    let pos = 0;
+    uploadChunks = [];
+    while (pos < file.size) {
+        uploadChunks.push({
+            start: pos,
+            end: Math.min(file.size, pos + chunkSize),
+            blob: file.slice(pos, Math.min(file.size, pos + chunkSize)),
+            retry: 4,
+            state: WAITING,
+            total: file.size,
+            crc32: null,
+        });
+        pos += chunkSize;
+    }
+    uploadCrc = calcFileCrc();
+    uploadNextChunk();
+    uploadNextChunk();
+    uploadNextChunk();
+}
+
+function createCrc32Table() {
+    let crcTable = new Int32Array(256);
+    for (let byte = 0; byte < 256; byte++) {
+        let c = byte;
+        for (let i = 0; i < 8; i++) {
+            c = ((c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1));
+        }
+        crcTable[byte] = c;
+    }
+    return crcTable;
+}
+
+const crcTable = createCrc32Table();
+
+function crc32(data, oldCrc) {
+    let crc = !oldCrc ? -1 : ~oldCrc;
+    for (let i = 0; i < data.length; i++) {
+        crc = (crc >>> 8) ^ crcTable[(crc ^ data[i]) & 0xFF];
+    }
+    return ~crc;
+};
+
+async function uploadZip() {
+    document.getElementById("browse").click();
+}
+
+async function fileSelected() {
+    let files = document.getElementById("browse").files;
+    if (files.length != 1) {
+        throw Error('Only one file can be selected.');
+    }
+    await uploadFile(files[0]);
+}
+
 async function wrap(func, ...args) {
     try {
         return await func.apply(undefined, args);
@@ -1033,6 +1332,10 @@ div.popup>div {
 
 div.screen {
     display: none;
+}
+
+div.drop {
+    background-color: rgb(32, 218, 171);
 }
 
 div#screen-progress {
@@ -1226,24 +1529,26 @@ input.text-input {
 
 </div>
 
-<div id="screen-options" class="screen" style="text-align: center;">
+<div id="screen-options" class="screen" style="text-align: center;"  ondrop="wrap(dropHandler, event, this);" ondragover="dragOverHandler(event, this);">
     <a id="install" class="button-big" onclick="wrap(install);" href="javascript:// Download and Install WordPress">Download and Install<br>WordPress</a>
     <br><br>
     <table class="details">
         <tr>
             <td width="33%"><br>Version</td>
             <td width="34%"><br>Language</td>
-            <td width="33%"><br>Download from</td>
+            <td width="33%"><br>Install from a custom ZIP file:</td>
         </tr>
         <tr>
             <td><span id="version"></span></td>
             <td><span id="lang"></span></td>
-            <td>wordpress.org</td>
+            <td>Drop ZIP file here</td>
         </tr>
         <tr>
             <td><br><a class="button-small" onclick="wrap(setRelease)" href="javascript:// Change Version">Change Version</a></td>
             <td><br><a class="button-small" onclick="wrap(setLanguage)" href="javascript:// Change Language">Change Language</a></td>
-            <td><br><a class="button-small" onclick="wrap(uploadZip)" href="javascript:// Upload custom ZIP file">Install custom ZIP file</a></td>
+            <td><br><a class="button-small" onclick="wrap(uploadZip)" href="javascript:// Upload custom ZIP file">Browse</a>
+                <input type="file" id="browse" style="display: none" onChange="wrap(fileSelected)"/>
+            </td>
         </tr>
     </table><br>
     <table class="details">
