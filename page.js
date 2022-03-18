@@ -811,7 +811,9 @@ async function uploadZip() {
 
 async function fileSelected() {
     let files = document.getElementById("browse").files;
-    if (files.length != 1) {
+    if (files.length == 0) {
+        return;
+    } else if (files.length != 1) {
         throw Error('Only one file can be selected.');
     }
     await uploadFile(files[0]);
