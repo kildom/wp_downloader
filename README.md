@@ -2,7 +2,7 @@
 
 This script simplifies download and installation of the WordPress.
 
-You have to place a single [`wp_downloader.php`](https://github.com/kildom/wp_downloader/releases/latest/download/wp_downloader.php) file to your server and start the installation with just **one click**.
+You have to place a [`wp_downloader.php`](https://github.com/kildom/wp_downloader/releases/latest/download/wp_downloader.php) file to your server and start the installation with just **one click**.
 
 ## Download
 
@@ -15,15 +15,15 @@ Just click this link: [`wp_downloader.php`](https://github.com/kildom/wp_downloa
 ## Fetures
 
 * Contained in a single `.php` file.
-* Automatically downloads releases from `wordpress.org`.
-* Allows selecting of different versions and languages of WordPress. ***(TODO)***
-* Allows installing a custom ZIP file. ***(TODO)***
-* Usues secure connections (HTTPS) between servers or digital signature/hash verification to provide full transfer security.
-* Supports automatic self updates, so you don't need to care about updating downloader manually.
+* Automatically download the releases from `wordpress.org`.
+* Selection of a different version and language of WordPress.
+* Installation a custom (uploaded by the user) ZIP file.
+* Secure connections (HTTPS) between servers and digital signature/hash verification provides full transfer security.
+* Automatic self updates, so you don't need to care about downloading a newer version of the downloaded manually.
 
 ## Rationale
 
-Normally, you have to download release ZIP file, unpack it, send over **2500 small files** to your server and then start the installation.
-This approach is especially inconvenient if you have unstable or slow FTP connection or you want to do it fast.
+Normally, you have to download a release ZIP file, unpack it, send over **2500 small files** to your server and then start the installation.
+This approach is especially inconvenient if you have an unstable or slow FTP connection.
 
-This downloader resolves above inconvenience.
+The downloader resolves above inconvenience.
