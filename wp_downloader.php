@@ -103,7 +103,7 @@ function get_url_secure($url, $prepare_only = false) {
 ?>
 <?php
 
-$version = 'v0.0.11';
+$version = 'v0.0.12';
 $cacert_url = 'https://curl.se/ca/cacert.pem';
 $github_cacert_url = 'https://raw.githubusercontent.com/kildom/wp_downloader/releases/cacert.pem';
 $update_url = 'https://raw.githubusercontent.com/kildom/wp_downloader/releases';
@@ -847,6 +847,8 @@ function startWordPressInstaller() {
     let path = subfolder;
     if (path.length) {
         path += '/';
+    } else {
+        path = '.';
     }
     if (devel_mode) {
         path = 'temp/' + path;
