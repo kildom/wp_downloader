@@ -375,6 +375,8 @@ function startWordPressInstaller() {
     let path = subfolder;
     if (path.length) {
         path += '/';
+    } else {
+        path = '.';
     }
     if (devel_mode) {
         path = 'temp/' + path;
